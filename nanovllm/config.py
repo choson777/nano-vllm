@@ -16,6 +16,7 @@ class Config:
     eos: int = -1
     kvcache_block_size: int = 256
     num_kvcache_blocks: int = -1
+    master_port: int = 23333
 
     def __post_init__(self):
         assert os.path.isdir(self.model)
@@ -24,3 +25,18 @@ class Config:
         self.hf_config = AutoConfig.from_pretrained(self.model)
         self.max_model_len = min(self.max_model_len, self.hf_config.max_position_embeddings)
         assert self.max_num_batched_tokens >= self.max_model_len
+
+
+@dataclass
+class DraftConfig:
+    tensor_parallel_size: int = 1
+    gpu_memory_utilization: float = 0.3
+    master_port: int = 23333
+    enforce_eager: bool = False
+    
+@dataclass
+class TargetConfig:  
+    tensor_parallel_size: int = 4
+    gpu_memory_utilization: float = 0.9
+    master_port: int = 23334
+    enforce_eager: bool = True
