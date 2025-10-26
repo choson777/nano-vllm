@@ -17,6 +17,7 @@ class Config:
     kvcache_block_size: int = 256
     num_kvcache_blocks: int = -1
     master_port: int = 23333
+    is_draft: bool = False
 
     def __post_init__(self):
         assert os.path.isdir(self.model)
@@ -33,6 +34,7 @@ class DraftConfig:
     gpu_memory_utilization: float = 0.3
     master_port: int = 23333
     enforce_eager: bool = False
+    is_draft: bool = True
     
 @dataclass
 class TargetConfig:  
@@ -40,3 +42,4 @@ class TargetConfig:
     gpu_memory_utilization: float = 0.9
     master_port: int = 23334
     enforce_eager: bool = True
+    is_draft: bool = False

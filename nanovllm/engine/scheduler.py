@@ -1,16 +1,20 @@
 from collections import deque
+from typing import Optional
 
 from nanovllm.config import Config
 from nanovllm.engine.sequence import Sequence, SequenceStatus
 from nanovllm.engine.block_manager import BlockManager
 
 
+
 class Scheduler:
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, num_spec_tokens: Optional[int]):
         self.max_num_seqs = config.max_num_seqs
         self.max_num_batched_tokens = config.max_num_batched_tokens
         self.eos = config.eos
+        self.is_draft = config.is_draft
+        self.num_spec_tokens = num_spec_tokens
         self.block_manager = BlockManager(config.num_kvcache_blocks, config.kvcache_block_size)
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
@@ -20,6 +24,7 @@ class Scheduler:
 
     def add(self, seq: Sequence):
         self.waiting.append(seq)
+        seq.reset_initial_tokens()
 
     def schedule(self) -> tuple[list[Sequence], bool]:
         # prefill
@@ -67,5 +72,10 @@ class Scheduler:
             seq.append_token(token_id)
             if (not seq.ignore_eos and token_id == self.eos) or seq.num_completion_tokens == seq.max_tokens:
                 seq.status = SequenceStatus.FINISHED
-                self.block_manager.deallocate(seq)
+                if not seq.is_draft:
+                    self.block_manager.deallocate(seq)
+                self.running.remove(seq)
+
+            if self.is_draft and seq.num_increase_tokens == self.num_spec_tokens:
+                seq.status = SequenceStatus.FINISHED
                 self.running.remove(seq)
