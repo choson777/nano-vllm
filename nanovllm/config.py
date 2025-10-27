@@ -31,7 +31,7 @@ class Config:
 @dataclass
 class DraftConfig:
     tensor_parallel_size: int = 1
-    gpu_memory_utilization: float = 0.3
+    gpu_memory_utilization: float = 0.8
     master_port: int = 23333
     enforce_eager: bool = False
     is_draft: bool = True
@@ -39,7 +39,7 @@ class DraftConfig:
 @dataclass
 class TargetConfig:  
     tensor_parallel_size: int = 4
-    gpu_memory_utilization: float = 0.9
+    gpu_memory_utilization: float = 0.8
     master_port: int = 23334
     enforce_eager: bool = True
     is_draft: bool = False

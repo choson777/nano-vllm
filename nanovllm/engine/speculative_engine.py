@@ -26,8 +26,8 @@ class SpeculativeEngine:
         self.draft_config = DraftConfig(**draft_kwargs)
         self.target_config = TargetConfig(**target_kwargs)
         self.num_speculative_tokens = num_speculative_tokens
-
-        self.draft_engine = LLMEngine(draft_model,  **asdict(self.draft_config))
         self.target_engine = LLMEngine(target_model, **asdict(self.target_config))
+        self.draft_engine = LLMEngine(draft_model,  **asdict(self.draft_config))
+        
         
     

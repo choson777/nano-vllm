@@ -22,8 +22,8 @@ class ModelRunner:
         self.world_size = config.tensor_parallel_size
         self.rank = rank
         self.event = event
-        if self.world_size == 1:
-            dist.init_process_group("nccl", "tcp://localhost:2333", world_size=self.world_size, rank=rank)
+        
+        dist.init_process_group("nccl", "tcp://localhost:2333", world_size=self.world_size, rank=rank)
         torch.cuda.set_device(rank)
         default_dtype = torch.get_default_dtype()
         torch.set_default_dtype(hf_config.torch_dtype)
@@ -98,7 +98,6 @@ class ModelRunner:
         torch.cuda.empty_cache()
 
     def allocate_kv_cache(self):
-        print(f"model {self.config.hf_config._name_or_path} rank{self.rank} allocate kv cache")
         config = self.config
         hf_config = config.hf_config
         free, total = torch.cuda.mem_get_info()
@@ -211,7 +210,7 @@ class ModelRunner:
         logits = self.run_model(input_ids, positions, is_prefill)
         token_ids = self.sampler(logits, temperatures).tolist() if self.rank == 0 else None
         reset_context()
-        return token_ids
+        return token_ids, logits
 
     @torch.inference_mode()
     def capture_cudagraph(self):

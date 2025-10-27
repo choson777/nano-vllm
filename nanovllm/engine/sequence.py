@@ -23,7 +23,7 @@ class Sequence:
         self.last_token = token_ids[-1]
         self.num_tokens = len(self.token_ids)
         self.num_prompt_tokens = len(token_ids)
-        self.num_initial_tokens = self.num_prompt_tokens
+        self.num_prev_tokens = self.num_prompt_tokens
         self.num_cached_tokens = 0
         self.block_table = []
         self.temperature = sampling_params.temperature
@@ -39,10 +39,14 @@ class Sequence:
     @property
     def is_finished(self):
         return self.status == SequenceStatus.FINISHED
+    
+    @property
+    def is_suspend(self):
+        return self.status == SequenceStatus.SUSPEND
 
     @property
     def num_increase_tokens(self):
-        return self.num_tokens - self.num_initial_tokens
+        return self.num_tokens - self.num_prev_tokens
     
     @property
     def num_completion_tokens(self):
@@ -56,6 +60,10 @@ class Sequence:
     def completion_token_ids(self):
         return self.token_ids[self.num_prompt_tokens:]
 
+    @property
+    def increase_token_ids(self):
+        return self.token_ids[self.num_prev_tokens:]
+    
     @property
     def num_cached_blocks(self):
         return self.num_cached_tokens // self.block_size
@@ -88,5 +96,6 @@ class Sequence:
         else:
             self.last_token = state[-1]
 
-    def reset_initial_tokens(self):
-        self.num_initial_tokens = self.num_tokens
+    def reset_for_new_turn(self):
+        self.num_prev_tokens = self.num_tokens
+        

@@ -9,7 +9,7 @@ from nanovllm.engine.block_manager import BlockManager
 
 class DraftScheduler:
 
-    def __init__(self, config: Config, num_spec_tokens: Optional[int]):
+    def __init__(self, config: Config, num_spec_tokens):
         self.max_num_seqs = config.max_num_seqs
         self.max_num_batched_tokens = config.max_num_batched_tokens
         self.eos = config.eos
@@ -25,6 +25,14 @@ class DraftScheduler:
 
     def add(self, seq: Sequence):
         self.waiting.append(seq)
+        
+        
+    def resume_from_suspend(self):
+        while self.suspend:
+            seq = self.suspend.popleft()
+            seq.status = SequenceStatus.RUNNING
+            seq.reset_for_new_turn()
+            self.running.append(seq)
 
     def schedule(self) -> tuple[list[Sequence], bool]:
         # prefill
@@ -44,19 +52,18 @@ class DraftScheduler:
             scheduled_seqs.append(seq)
         if scheduled_seqs:
             return scheduled_seqs, True
-
+        
         # decode
-        while self.suspend and num_seqs < self.max_num_seqs:
-            seq = self.suspend.popleft()
+        while self.running and num_seqs < self.max_num_seqs:
+            seq = self.running.popleft()
             while not self.block_manager.can_append(seq):
-                if self.suspend:
-                    self.preempt(self.suspend.pop())
+                if self.running:
+                    self.preempt(self.running.pop())
                 else:
                     self.preempt(seq)
                     break
             else:
                 num_seqs += 1
-                seq.status = SequenceStatus.SUSPEND
                 self.block_manager.may_append(seq)
                 scheduled_seqs.append(seq)
         assert scheduled_seqs
@@ -72,7 +79,6 @@ class DraftScheduler:
         for seq, token_id in zip(seqs, token_ids):
             seq.append_token(token_id)
             if (not seq.ignore_eos and token_id == self.eos) or seq.num_completion_tokens == seq.max_tokens or seq.num_increase_tokens == self.num_spec_tokens:
-                seq.reset_initial_tokens()
                 seq.status = SequenceStatus.SUSPEND
                 self.running.remove(seq)
                 self.suspend.append(seq)
@@ -80,3 +86,4 @@ class DraftScheduler:
     def free_block(self, seqs):
         for seq in seqs:
             self.block_manager.deallocate(seq)
+            seq.status = SequenceStatus.FINISHED
