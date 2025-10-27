@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torch.distributed as dist
 
 from nanovllm.utils.context import get_context
+from nanovllm.utils.safe_dist import safe_get_rank, safe_get_world_size
 
 
 class VocabParallelEmbedding(nn.Module):
@@ -12,10 +13,11 @@ class VocabParallelEmbedding(nn.Module):
         self,
         num_embeddings: int,
         embedding_dim: int,
+        is_distributed: bool,
     ):
         super().__init__()
-        self.tp_rank = dist.get_rank()
-        self.tp_size = dist.get_world_size()
+        self.tp_rank = safe_get_rank(is_distributed)
+        self.tp_size = safe_get_world_size(is_distributed)
         assert num_embeddings % self.tp_size == 0
         self.num_embeddings = num_embeddings
         self.num_embeddings_per_partition = self.num_embeddings // self.tp_size
@@ -49,9 +51,10 @@ class ParallelLMHead(VocabParallelEmbedding):
         num_embeddings: int,
         embedding_dim: int,
         bias: bool = False,
+        is_distributed: bool = False,
     ):
         assert not bias
-        super().__init__(num_embeddings, embedding_dim)
+        super().__init__(num_embeddings, embedding_dim, is_distributed)
 
     def forward(self, x: torch.Tensor):
         context = get_context()

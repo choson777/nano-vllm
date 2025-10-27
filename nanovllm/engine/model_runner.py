@@ -23,12 +23,16 @@ class ModelRunner:
         self.rank = rank
         self.event = event
         
-        dist.init_process_group("nccl", "tcp://localhost:2333", world_size=self.world_size, rank=rank)
+        
+        self.is_distributed = (self.world_size > 1)
+        if self.is_distributed:
+            if not dist.is_initialized():
+                dist.init_process_group("nccl", f"tcp://localhost:2333", world_size=self.world_size, rank=rank)
         torch.cuda.set_device(rank)
         default_dtype = torch.get_default_dtype()
         torch.set_default_dtype(hf_config.torch_dtype)
         torch.set_default_device("cuda")
-        self.model = Qwen3ForCausalLM(hf_config)
+        self.model = Qwen3ForCausalLM(hf_config, is_distributed=self.is_distributed)
         load_model(self.model, config.model)
         self.sampler = Sampler()
         self.warmup_model()
@@ -56,7 +60,8 @@ class ModelRunner:
         if not self.enforce_eager:
             del self.graphs, self.graph_pool
         torch.cuda.synchronize()
-        dist.destroy_process_group()
+        if self.is_distributed:
+            dist.destroy_process_group()
 
     def loop(self):
         while True:

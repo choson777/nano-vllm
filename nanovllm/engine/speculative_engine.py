@@ -1,4 +1,5 @@
 from nanovllm.engine.llm_engine import LLMEngine
+from nanovllm.engine.draft_engine import DraftEngine
 from nanovllm.config import Config, DraftConfig, TargetConfig
 from dataclasses import fields, asdict
 
@@ -27,7 +28,8 @@ class SpeculativeEngine:
         self.target_config = TargetConfig(**target_kwargs)
         self.num_speculative_tokens = num_speculative_tokens
         self.target_engine = LLMEngine(target_model, **asdict(self.target_config))
-        self.draft_engine = LLMEngine(draft_model,  **asdict(self.draft_config))
-        
+        print("initial target engine sucessfully")
+        self.draft_engine = DraftEngine(draft_model, num_turn_spec_tokens=4, **asdict(self.draft_config))
+        print("initial draft engine sucessfully")
         
     

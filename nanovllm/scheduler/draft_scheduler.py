@@ -25,8 +25,10 @@ class DraftScheduler:
 
     def add(self, seq: Sequence):
         self.waiting.append(seq)
-        
-        
+    
+    # def rollback(self, seqs):
+    
+    
     def resume_from_suspend(self):
         while self.suspend:
             seq = self.suspend.popleft()

@@ -18,7 +18,9 @@ class DraftEngine:
         config_fields = {field.name for field in fields(Config)}
         config_kwargs = {k: v for k, v in kwargs.items() if k in config_fields}
         config = Config(model, **config_kwargs)
+        print(1)
         self.model_runner = ModelRunner(config, 0, [])
+        print(5)
         self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
         config.eos = self.tokenizer.eos_token_id
         self.scheduler = DraftScheduler(config, num_turn_spec_tokens)

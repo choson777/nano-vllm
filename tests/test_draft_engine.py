@@ -28,11 +28,20 @@ def main():
     ]
     for prompt in prompts:
         draft_llm.add_request(prompt, sampling_params)
+
+        
+    outputs = {}
+    for i in range(10):
+        print(i)
+        output, seq_logits = draft_llm.run()
+        print(output)
+        for seq_id in output:
+            if seq_id not in outputs:
+                outputs[seq_id] = []
+            outputs[seq_id].extend(output[seq_id])
     
-    for i in range(5):
-        print(1)
-        outputs, seq_logits = draft_llm.run()
-        print(outputs)
+    for seq_id in outputs:
+        print(tokenizer.decode(outputs[seq_id]))
     
 if __name__ == '__main__':
     main()

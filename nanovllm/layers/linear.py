@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import torch.distributed as dist
+from nanovllm.utils.safe_dist import safe_get_rank, safe_get_world_size
 
 
 def divide(numerator, denominator):
@@ -17,11 +18,12 @@ class LinearBase(nn.Module):
         output_size: int,
         bias: bool = False,
         tp_dim: int | None = None,
+        is_distributed: bool = False,
     ):
         super().__init__()
         self.tp_dim = tp_dim
-        self.tp_rank = dist.get_rank()
-        self.tp_size = dist.get_world_size()
+        self.tp_rank = safe_get_rank(is_distributed)
+        self.tp_size = safe_get_world_size(is_distributed)
         self.weight = nn.Parameter(torch.empty(output_size, input_size))
         self.weight.weight_loader = self.weight_loader
         if bias:
@@ -41,8 +43,9 @@ class ReplicatedLinear(LinearBase):
         input_size: int,
         output_size: int,
         bias: bool = False,
+        is_distributed: bool = False,
     ):
-        super().__init__(input_size, output_size, bias)
+        super().__init__(input_size, output_size, bias, is_distributed)
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor):
         param.data.copy_(loaded_weight)
@@ -58,9 +61,10 @@ class ColumnParallelLinear(LinearBase):
         input_size: int,
         output_size: int,
         bias: bool = False,
+        is_distributed: bool = False,
     ):
-        tp_size = dist.get_world_size()
-        super().__init__(input_size, divide(output_size, tp_size), bias, 0)
+        tp_size = safe_get_world_size(is_distributed)
+        super().__init__(input_size, divide(output_size, tp_size), bias, 0, is_distributed)
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor):
         param_data = param.data
@@ -80,9 +84,10 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
         input_size: int,
         output_sizes: list[int],
         bias: bool = False,
+        is_distributed: bool = False
     ):
         self.output_sizes = output_sizes
-        super().__init__(input_size, sum(output_sizes), bias)
+        super().__init__(input_size, sum(output_sizes), bias, is_distributed)
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor, loaded_shard_id: int):
         param_data = param.data
@@ -102,14 +107,15 @@ class QKVParallelLinear(ColumnParallelLinear):
         total_num_heads: int,
         total_num_kv_heads: int | None = None,
         bias: bool = False,
+        is_distributed: bool = False,
     ):
-        tp_size = dist.get_world_size()
+        tp_size = safe_get_world_size(is_distributed)
         total_num_kv_heads = total_num_kv_heads or total_num_heads
         self.head_size = head_size
         self.num_heads = divide(total_num_heads, tp_size)
         self.num_kv_heads = divide(total_num_kv_heads, tp_size)
         output_size = (total_num_heads + 2 * total_num_kv_heads) * self.head_size
-        super().__init__(hidden_size, output_size, bias)
+        super().__init__(hidden_size, output_size, bias, is_distributed)
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor, loaded_shard_id: str):
         param_data = param.data
@@ -135,9 +141,10 @@ class RowParallelLinear(LinearBase):
         input_size: int,
         output_size: int,
         bias: bool = False,
+        is_distributed: bool = False,
     ):
-        tp_size = dist.get_world_size()
-        super().__init__(divide(input_size, tp_size), output_size, bias, 1)
+        tp_size = safe_get_world_size(is_distributed)
+        super().__init__(divide(input_size, tp_size), output_size, bias, 1, is_distributed)
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor):
         param_data = param.data
