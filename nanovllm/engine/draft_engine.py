@@ -18,11 +18,8 @@ class DraftEngine:
         config_fields = {field.name for field in fields(Config)}
         config_kwargs = {k: v for k, v in kwargs.items() if k in config_fields}
         config = Config(model, **config_kwargs)
-        print(1)
         self.model_runner = ModelRunner(config, 0, [])
-        print(5)
-        self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
-        config.eos = self.tokenizer.eos_token_id
+        print(f"draft engine eos{config.eos}")
         self.scheduler = DraftScheduler(config, num_turn_spec_tokens)
         atexit.register(self.exit)
 
@@ -30,10 +27,7 @@ class DraftEngine:
         self.model_runner.call("exit")
         del self.model_runner
 
-    def add_request(self, prompt: str | list[int], sampling_params: SamplingParams):
-        if isinstance(prompt, str):
-            prompt = self.tokenizer.encode(prompt)
-        seq = Sequence(prompt, sampling_params)
+    def add_request(self, seq):
         self.scheduler.add(seq)
     
 

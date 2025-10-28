@@ -84,6 +84,12 @@ class Sequence:
         self.token_ids.append(token_id)
         self.last_token = token_id
         self.num_tokens += 1
+    
+    def extend_token(self, token_ids: list[int]):
+        print(2)
+        self.token_ids.extend(token_ids)
+        self.last_token = token_ids[-1]
+        self.num_tokens += len(token_ids)
 
     def __getstate__(self):
         return (self.num_tokens, self.num_prompt_tokens, self.num_cached_tokens, self.block_table,
