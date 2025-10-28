@@ -55,3 +55,4 @@ class SpeculativeEngine:
     def one_turn(self):
         outputs, seq_logits = self.draft_engine.run()
         self.target_engine.integrate_draft_output(outputs, self.seq_id_map)
+        outputs, seq_logits = self.target_engine.run()

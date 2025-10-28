@@ -182,7 +182,7 @@ class ModelRunner:
         block_tables = self.prepare_block_tables(seqs)
         set_context(False, slot_mapping=slot_mapping, context_lens=context_lens, block_tables=block_tables)
         return input_ids, positions
-
+    
     def prepare_sample(self, seqs: list[Sequence]):
         temperatures = []
         for seq in seqs:

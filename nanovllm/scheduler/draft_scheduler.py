@@ -19,7 +19,7 @@ class DraftScheduler:
         self.running: deque[Sequence] = deque()
         self.suspend: deque[Sequence] = deque()
 
-    def is_turn_finished(self):
+    def is_round_finished(self):
         return not self.waiting and not self.running
 
     def add(self, seq: Sequence):
@@ -31,7 +31,7 @@ class DraftScheduler:
         while self.suspend:
             seq = self.suspend.popleft()
             seq.status = SequenceStatus.RUNNING
-            seq.reset_for_new_turn()
+            seq.reset_for_new_round()
             self.running.append(seq)
 
     def schedule(self) -> tuple[list[Sequence], bool]:

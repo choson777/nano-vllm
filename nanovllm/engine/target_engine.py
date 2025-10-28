@@ -44,5 +44,32 @@ class TargetEngine:
         
     def integrate_draft_output(self, outputs, seq_id_map):
         self.scheduler.add_token_ids(outputs, seq_id_map)
+
+    def is_round_finished(self):
+        return self.scheduler.is_round_finished()
+
+    
+    def step(self):
+        seqs, is_prefill = self.scheduler.schedule()
+        token_ids, logits = self.model_runner.call("run", seqs, is_prefill)
+        self.scheduler.postprocess(seqs, token_ids)
+        outputs = [(seq.seq_id, seq.increase_token_ids) for seq in seqs if (seq.is_suspend or seq.is_finished)]
+        seq_id_to_logits = [(seq.seq_id, logit) for seq, logit in zip(seqs, logits)]
+        return outputs, seq_id_to_logits
+    
+    
+    def run(self):
+        self.scheduler.resume_from_suspend()
+        seq_logits = {}
+        outputs = {}
+        while not self.is_round_finished():
+            output, logits = self.step()
+            for seq_id, logit in logits:
+                if seq_id not in seq_logits:
+                    seq_logits[seq_id] = []
+                seq_logits[seq_id].append(logit)
                 
+            for seq_id, token_ids in output:
+                outputs[seq_id] = token_ids
+        return outputs, seq_logits
             

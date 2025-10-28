@@ -29,7 +29,7 @@ def main():
     spec_llm.one_turn()
     
     
-    for seq in spec_llm.target_engine.scheduler.waiting:
+    for seq in spec_llm.target_engine.scheduler.suspend:
         print(seq.seq_id, seq.token_ids, seq.block_table)
     for seq in spec_llm.draft_engine.scheduler.suspend:
         print(seq.seq_id, seq.token_ids, seq.block_table)

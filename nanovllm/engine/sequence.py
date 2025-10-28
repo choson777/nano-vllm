@@ -23,7 +23,6 @@ class Sequence:
         self.last_token = token_ids[-1]
         self.num_tokens = len(self.token_ids)
         self.num_prompt_tokens = len(token_ids)
-        self.num_prev_tokens = self.num_prompt_tokens
         self.num_cached_tokens = 0
         self.block_table = []
         self.temperature = sampling_params.temperature
@@ -46,7 +45,7 @@ class Sequence:
 
     @property
     def num_increase_tokens(self):
-        return self.num_tokens - self.num_prev_tokens
+        return self.num_tokens - self.num_cached_tokens
     
     @property
     def num_completion_tokens(self):
@@ -62,12 +61,12 @@ class Sequence:
 
     @property
     def increase_token_ids(self):
-        return self.token_ids[self.num_prev_tokens:]
+        return self.token_ids[self.num_cached_tokens:]
     
     @property
     def num_cached_blocks(self):
-        return self.num_cached_tokens // self.block_size
-
+        return self.num_cached_tokens // self.block_size        
+    
     @property
     def num_blocks(self):
         return (self.num_tokens + self.block_size - 1) // self.block_size
@@ -86,9 +85,9 @@ class Sequence:
         self.num_tokens += 1
     
     def extend_token(self, token_ids: list[int]):
-        print(2)
         self.token_ids.extend(token_ids)
         self.last_token = token_ids[-1]
+        self.last_turn_token = token_ids
         self.num_tokens += len(token_ids)
 
     def __getstate__(self):
@@ -102,6 +101,6 @@ class Sequence:
         else:
             self.last_token = state[-1]
 
-    def reset_for_new_turn(self):
-        self.num_prev_tokens = self.num_tokens
+    def reset_for_new_round(self):
+        self.num_cached_tokens = self.num_tokens
         
