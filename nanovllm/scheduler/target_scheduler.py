@@ -83,14 +83,8 @@ class TargetScheduler:
         self.block_manager.deallocate(seq)
         self.waiting.appendleft(seq)
         
-    def postprocess(self, seqs: list[Sequence], token_ids: list[int]):
-        for seq, token_id in zip(seqs, token_ids):
-            seq.append_token(token_id)
-            if (not seq.ignore_eos and token_id == self.eos) or seq.num_completion_tokens == seq.max_tokens:
-                seq.status = SequenceStatus.FINISHED
-                self.block_manager.deallocate(seq)
-                self.running.remove(seq)       
-            else:
-                seq.status = SequenceStatus.SUSPEND
-                self.running.remove(seq)
-                self.suspend.append(seq)
+    def postprocess(self, seqs: list[Sequence]):
+        for seq in seqs:
+            seq.status = SequenceStatus.SUSPEND
+            self.running.remove(seq)
+            self.suspend.append(seq)

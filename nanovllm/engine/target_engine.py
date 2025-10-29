@@ -50,13 +50,13 @@ class TargetEngine:
 
     
     def step(self):
-        seqs, _ = self.scheduler.schedule()
-        token_ids, logits = self.model_runner.call("run", seqs, True)
+        seqs, is_prefill = self.scheduler.schedule()
+        _, logits = self.model_runner.call("run", seqs, is_prefill)
         print(logits)
-        # self.scheduler.postprocess(seqs, token_ids)
+        self.scheduler.postprocess(seqs)
         # outputs = [(seq.seq_id, seq.increase_token_ids) for seq in seqs if (seq.is_suspend or seq.is_finished)]
         # seq_id_to_logits = [(seq.seq_id, logit) for seq, logit in zip(seqs, logits)]
-        return token_ids, logits
+        return logits
     
     
     def run(self):
@@ -64,7 +64,7 @@ class TargetEngine:
         seq_logits = {}
         outputs = {}
         while not self.is_round_finished():
-            output, logits = self.step()
+            logits = self.step()
             # for seq_id, logit in logits:
             #     if seq_id not in seq_logits:
             #         seq_logits[seq_id] = []

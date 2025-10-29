@@ -32,12 +32,13 @@ def main():
     ]
 
     sampling_params = sampling_params = [sampling_params] * len(prompts)
-    
+    seq_id_map = {}
     for prompt, sp in zip(prompts, sampling_params):
         if isinstance(prompt, str):
             prompt = tokenizer.encode(prompt)
         target_seq = Sequence(prompt, sp)
         draft_seq = Sequence(prompt, sp)
+        seq_id_map[target_seq.seq_id] = draft_seq.seq_id
         target_engine.add_request(target_seq)
     
     outputs = {
@@ -47,8 +48,18 @@ def main():
         11: [151667, 198, 32313, 11]
     }
     
+    target_engine.integrate_draft_output(outputs, seq_id_map)
     
+    target_engine.run()
     
+    outputs = {
+        5: [151667, 198, 32313, 11],
+        7: [151667, 198, 32313, 11],
+        9: [151667, 198, 32313, 11],
+        11: [151667, 198, 32313, 11]
+    }
+    
+    target_engine.integrate_draft_output(outputs, seq_id_map)
     target_engine.run()
     
 if __name__ == '__main__':
