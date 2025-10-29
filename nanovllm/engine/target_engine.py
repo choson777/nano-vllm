@@ -28,7 +28,6 @@ class TargetEngine:
             self.ps.append(process)
             self.events.append(event)
         self.model_runner = ModelRunner(config, 0, self.events)
-        print(f"target engine eos{config.eos}")
         self.scheduler = TargetScheduler(config)
         atexit.register(self.exit)
         
@@ -52,19 +51,21 @@ class TargetEngine:
     def step(self):
         seqs, is_prefill = self.scheduler.schedule()
         _, logits = self.model_runner.call("run", seqs, is_prefill)
-        print(logits)
         self.scheduler.postprocess(seqs)
-        # outputs = [(seq.seq_id, seq.increase_token_ids) for seq in seqs if (seq.is_suspend or seq.is_finished)]
-        # seq_id_to_logits = [(seq.seq_id, logit) for seq, logit in zip(seqs, logits)]
-        return logits
+        seq_logits = {}
+        start_index = 0
+        for seq in seqs:
+            end_index = start_index + seq.num_increase_tokens
+            seq_logit = logits[start_index: end_index]
+            seq_logits[seq.seq_id] = seq_logit
+            start_index = end_index
+        return seq_logits
     
     
     def run(self):
         self.scheduler.resume_from_suspend()
-        seq_logits = {}
-        outputs = {}
         while not self.is_round_finished():
-            logits = self.step()
+            seq_logits = self.step()
             # for seq_id, logit in logits:
             #     if seq_id not in seq_logits:
             #         seq_logits[seq_id] = []
@@ -72,5 +73,5 @@ class TargetEngine:
                 
             # for seq_id, token_ids in output:
             #     outputs[seq_id] = token_ids
-        return outputs, seq_logits
+        return seq_logits
             

@@ -59,6 +59,7 @@ class Scheduler:
 
     def preempt(self, seq: Sequence):
         seq.status = SequenceStatus.WAITING
+        seq.num_prev_tokens = seq.num_tokens
         self.block_manager.deallocate(seq)
         self.waiting.appendleft(seq)
 

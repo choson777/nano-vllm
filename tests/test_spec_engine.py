@@ -4,7 +4,7 @@ from transformers import AutoTokenizer
 
 def main():
     draft_model_path = os.path.expanduser("/data3/lqc/models/qwen3-0.6b/")
-    target_model_path = os.path.expanduser("/data3/szf/huggingface/model/Qwen3-8B/")
+    target_model_path = os.path.expanduser("/data3/lqc/models/qwen3-0.6b/")
     tokenizer = AutoTokenizer.from_pretrained(target_model_path)
     spec_llm = SpeculativeEngine(draft_model_path, target_model_path)
     print("✅ SpeculativeEngine initialized successfully!")
@@ -26,7 +26,7 @@ def main():
     ]
     
     spec_llm.add_request(prompts, sampling_params)
-    spec_llm.one_turn()
+    spec_llm.one_round()
     
     
     for seq in spec_llm.target_engine.scheduler.suspend:

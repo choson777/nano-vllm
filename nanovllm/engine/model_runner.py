@@ -229,10 +229,10 @@ class ModelRunner:
     def prepare_sample(self, seqs: list[Sequence]):
         temperatures = []
         for seq in seqs:
-            if self.is_target and not self.is_warmup:
-                temperatures.extend([seq.temperature] * seq.num_increase_tokens)
-            else:
-                temperatures.append(seq.temperature)
+            # if self.is_target and not self.is_warmup:
+            #     temperatures.extend([seq.temperature] * seq.num_increase_tokens)
+            # else:
+            temperatures.append(seq.temperature)
         temperatures = torch.tensor(temperatures, dtype=torch.float32, pin_memory=True).cuda(non_blocking=True)
         return temperatures
 

@@ -64,7 +64,7 @@ class TargetScheduler:
     
         while self.running and num_seqs < self.max_num_seqs:
             seq = self.running.popleft()
-            while not self.block_manager.can_append(seq):
+            while not self.block_manager.can_append_mul_tokens(seq):
                 if self.running:
                     self.preempt(self.running.pop())
                 else:
@@ -72,7 +72,7 @@ class TargetScheduler:
                     break
             else:
                 num_seqs += 1
-                self.block_manager.may_append(seq)
+                self.block_manager.may_append_mul_tokens(seq)
                 scheduled_seqs.append(seq)
         assert scheduled_seqs
         self.running.extendleft(reversed(scheduled_seqs))

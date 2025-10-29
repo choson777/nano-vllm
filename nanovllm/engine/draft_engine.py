@@ -4,6 +4,7 @@ from time import perf_counter
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer
 import torch.multiprocessing as mp
+import torch
 
 from nanovllm.config import Config
 from nanovllm.sampling_params import SamplingParams
@@ -19,7 +20,6 @@ class DraftEngine:
         config_kwargs = {k: v for k, v in kwargs.items() if k in config_fields}
         config = Config(model, **config_kwargs)
         self.model_runner = ModelRunner(config, 0, [])
-        print(f"draft engine eos{config.eos}")
         self.scheduler = DraftScheduler(config, num_turn_spec_tokens)
         atexit.register(self.exit)
 
@@ -55,4 +55,6 @@ class DraftEngine:
                 
             for seq_id, token_ids in output:
                 outputs[seq_id] = token_ids
+        for seq_id in seq_logits:
+            seq_logits[seq_id] = torch.stack(seq_logits[seq_id])
         return outputs, seq_logits

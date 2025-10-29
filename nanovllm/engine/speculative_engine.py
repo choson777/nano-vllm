@@ -32,7 +32,6 @@ class SpeculativeEngine:
         self.target_config = TargetConfig(**target_kwargs)
         self.num_speculative_tokens = num_speculative_tokens
         self.tokenizer = AutoTokenizer.from_pretrained(target_model, use_fast=True)
-        print(self.tokenizer.eos_token_id)
         self.draft_config.eos = self.tokenizer.eos_token_id
         self.target_config.eos = self.tokenizer.eos_token_id
         self.target_engine = TargetEngine(target_model, **asdict(self.target_config))
@@ -52,7 +51,7 @@ class SpeculativeEngine:
             self.draft_engine.add_request(draft_seq)
     
     
-    def one_turn(self):
-        outputs, seq_logits = self.draft_engine.run()
+    def one_round(self):
+        outputs, draft_seq_logits_map = self.draft_engine.run()
         self.target_engine.integrate_draft_output(outputs, self.seq_id_map)
-        outputs, seq_logits = self.target_engine.run()
+        target_seq_logits_map = self.target_engine.run()
