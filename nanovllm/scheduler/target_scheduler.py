@@ -29,16 +29,18 @@ class TargetScheduler:
     def add_token_ids(self, token_ids_map, seq_id_map):
         for seq in self.waiting:
             if seq_id_map[seq.seq_id] in token_ids_map:
+                seq.reset_for_new_round()
                 seq.extend_token(token_ids_map[seq_id_map[seq.seq_id]])
+                
         for seq in self.suspend:
             if seq_id_map[seq.seq_id] in token_ids_map:
+                seq.reset_for_new_round()
                 seq.extend_token(token_ids_map[seq_id_map[seq.seq_id]])
 
     def resume_from_suspend(self):
         while self.suspend:
             seq = self.suspend.popleft()
             seq.status = SequenceStatus.RUNNING
-            seq.reset_for_new_turn()
             self.running.append(seq)
     
     def schedule(self) -> tuple[list[Sequence], bool]:

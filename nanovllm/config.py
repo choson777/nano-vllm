@@ -17,7 +17,7 @@ class Config:
     kvcache_block_size: int = 256
     num_kvcache_blocks: int = -1
     master_port: int = 23333
-    is_draft: bool = False
+    is_target: bool = False
 
     def __post_init__(self):
         assert os.path.isdir(self.model)
@@ -31,17 +31,17 @@ class Config:
 @dataclass
 class DraftConfig:
     tensor_parallel_size: int = 1
-    gpu_memory_utilization: float = 0.8
+    gpu_memory_utilization: float = 0.9
     master_port: int = 23333
     enforce_eager: bool = True
-    is_draft: bool = True
+    is_target: bool = False
     eos: int = -1
     
 @dataclass
 class TargetConfig:  
-    tensor_parallel_size: int = 4
-    gpu_memory_utilization: float = 0.5
+    tensor_parallel_size: int = 1
+    gpu_memory_utilization: float = 0.8
     master_port: int = 23334
     enforce_eager: bool = True
-    is_draft: bool = False
+    is_target: bool = True
     eos: int = -1

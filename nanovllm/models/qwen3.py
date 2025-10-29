@@ -219,5 +219,4 @@ class Qwen3ForCausalLM(nn.Module):
         self,
         hidden_states: torch.Tensor,
     ) -> torch.Tensor:
-        print(hidden_states.shape)
         return self.lm_head(hidden_states)
