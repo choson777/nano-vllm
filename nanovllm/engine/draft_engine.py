@@ -31,9 +31,12 @@ class DraftEngine:
         self.scheduler.add(seq)
     
 
-    def step(self):
+    def step(self, i):
         seqs, is_prefill = self.scheduler.schedule()
         token_ids, logits = self.model_runner.call("run", seqs, is_prefill)
+        logits = logits.clone()
+        logits[:, token_ids[0] + 1] = -1000
+        token_ids = [token_id + 1 for token_id in token_ids]
         self.scheduler.postprocess(seqs, token_ids)
         outputs = [(seq.seq_id, seq.increase_token_ids) for seq in seqs if (seq.is_suspend or seq.is_finished)]
         seq_id_to_logits = [(seq.seq_id, logit) for seq, logit in zip(seqs, logits)]
@@ -46,8 +49,9 @@ class DraftEngine:
         self.scheduler.resume_from_suspend()
         seq_logits = {}
         outputs = {}
+        i = 0
         while not self.is_round_finished():
-            output, logits = self.step()
+            output, logits = self.step(i)
             for seq_id, logit in logits:
                 if seq_id not in seq_logits:
                     seq_logits[seq_id] = []
@@ -55,6 +59,7 @@ class DraftEngine:
                 
             for seq_id, token_ids in output:
                 outputs[seq_id] = token_ids
+            i += 1
         for seq_id in seq_logits:
             seq_logits[seq_id] = torch.stack(seq_logits[seq_id])
         return outputs, seq_logits

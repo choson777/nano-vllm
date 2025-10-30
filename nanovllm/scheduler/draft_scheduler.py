@@ -32,12 +32,13 @@ class DraftScheduler:
         if num_unaccept_tokens > 0:
             self.block_manager.reclaim_tokens(seq, num_unaccept_tokens)
             seq.delete_tokens(num_unaccept_tokens)
-        seq.reset_for_new_round()
+        seq.set_checked_tokens()
         seq.append_token(new_token_id)
         
     def resume_from_suspend(self):
         while self.suspend:
             seq = self.suspend.popleft()
+            seq.reset_for_new_round()
             seq.status = SequenceStatus.RUNNING
             self.running.append(seq)
 

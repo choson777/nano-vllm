@@ -76,4 +76,4 @@ class TargetEngine:
         return seq_outputs, seq_logits
     
     def verify_process(self, seq_id, num_unaccpet_tokens, new_token_id):
-        self.scheduler(seq_id, num_unaccpet_tokens, new_token_id)
+        self.scheduler.verify_process(seq_id, num_unaccpet_tokens, new_token_id)

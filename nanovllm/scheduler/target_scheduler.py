@@ -31,12 +31,10 @@ class TargetScheduler:
     def add_token_ids(self, token_ids_map):
         for seq in self.waiting:
             if seq.seq_id in token_ids_map:
-                seq.reset_for_new_round()
                 seq.extend_token(token_ids_map[seq.seq_id])
                 
         for seq in self.suspend:
             if seq.seq_id in token_ids_map:
-                seq.reset_for_new_round()
                 seq.extend_token(token_ids_map[seq.seq_id])
 
     def resume_from_suspend(self):
@@ -97,5 +95,5 @@ class TargetScheduler:
         if num_unaccept_tokens > 0:
             self.block_manager.reclaim_tokens(seq, num_unaccept_tokens)
             seq.delete_tokens(num_unaccept_tokens)
-        seq.reset_for_new_round()
+        seq.set_checked_tokens()
         seq.append_token(new_token_id)

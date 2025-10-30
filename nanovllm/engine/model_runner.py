@@ -170,6 +170,7 @@ class ModelRunner:
         cu_seqlens_q = torch.tensor(cu_seqlens_q, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         cu_seqlens_k = torch.tensor(cu_seqlens_k, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         slot_mapping = torch.tensor(slot_mapping, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
+        logit_indexs = torch.tensor(logit_indexs, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         is_target_flag = self.is_target and not self.is_warmup
         set_context(True, is_target_flag, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, slot_mapping, None, block_tables, logit_indexs)
         return input_ids, positions
@@ -260,9 +261,6 @@ class ModelRunner:
             input_ids, positions = self.prepare_prefill(seqs) if is_prefill else self.prepare_target_decode(seqs)
         else:
             input_ids, positions = self.prepare_prefill(seqs) if is_prefill else self.prepare_decode(seqs)
-        print(f"is_prefill: {is_prefill}")
-        print(f"input_ids: {input_ids}")
-        print(f"positions: {positions}")
         temperatures = self.prepare_sample(seqs) if self.rank == 0 else None
         logits = self.run_model(input_ids, positions, is_prefill)
         token_ids = self.sampler(logits, temperatures).tolist() if self.rank == 0 else None

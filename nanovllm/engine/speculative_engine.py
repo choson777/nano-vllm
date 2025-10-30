@@ -47,7 +47,6 @@ class SpeculativeEngine:
                 prompt = self.tokenizer.encode(prompt)
             target_seq = Sequence(prompt, sp)
             draft_seq = Sequence(prompt, sp, target_seq.seq_id)
-            self.seq_temperature[target_seq.seq_id] = target_seq.temperature
             self.target_engine.add_request(target_seq) 
             self.draft_engine.add_request(draft_seq)
     
@@ -57,16 +56,18 @@ class SpeculativeEngine:
         verbose = True
         for seq_id in common_seq_ids:
             draft_logits = draft_seq_logits[seq_id]
-            target_logits = draft_seq_logits[seq_id]
+            target_logits = target_seq_logits[seq_id]
             draft_token_ids = draft_outputs[seq_id]
             target_token_ids = target_outputs[seq_id]
             num_unaccept_tokens = self.num_speculative_tokens
-            for i in self.num_speculative_tokens:    
-                r = torch.rand(1)
+            print(f"seq {seq_id} draft logit shape {draft_logits.shape} target_logit shape {target_logits.shape} {draft_token_ids} {target_token_ids}")
+            for i in range(self.num_speculative_tokens):    
+                r = torch.rand(1, device=draft_logits.device)
                 draft_logit = draft_logits[i]
                 target_logit = target_logits[i]
-                token_id = draft_token_ids[i]
-                if r > (target_logit[token_id] / draft_logit[token_id]):
+                draft_token_id = draft_token_ids[i]
+                print(f"{i} target {target_logit[draft_token_id]} draft {draft_logit[draft_token_id]} r {r}")
+                if r > (target_logit[draft_token_id] / draft_logit[draft_token_id]):
                     break
                 
                 if verbose:

@@ -115,3 +115,6 @@ class Sequence:
     def reset_for_new_round(self):
         self.num_prev_tokens = self.num_tokens
         
+    def set_checked_tokens(self):
+        self.num_checked_logit_generated_tokens = self.num_tokens
+        
