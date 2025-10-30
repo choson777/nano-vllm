@@ -37,7 +37,7 @@ def main():
         if isinstance(prompt, str):
             prompt = tokenizer.encode(prompt)
         target_seq = Sequence(prompt, sp)
-        draft_seq = Sequence(prompt, sp)
+        draft_seq = Sequence(prompt, sp, target_seq.seq_id)
         seq_id_map[target_seq.seq_id] = draft_seq.seq_id
         target_engine.add_request(target_seq)
     

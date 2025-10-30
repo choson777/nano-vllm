@@ -18,20 +18,27 @@ class DraftScheduler:
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
         self.suspend: deque[Sequence] = deque()
-
+        self.seq_id_map = {}
+        
     def is_round_finished(self):
         return not self.waiting and not self.running
 
     def add(self, seq: Sequence):
         self.waiting.append(seq)
+        self.seq_id_map[seq.seq_id] = seq
     
-    # def rollback(self, seqs):
-    
+    def verify_process(self, seq_id, num_unaccept_tokens, new_token_id):
+        seq = self.seq_id_map[seq_id]
+        if num_unaccept_tokens > 0:
+            self.block_manager.reclaim_tokens(seq, num_unaccept_tokens)
+            seq.delete_tokens(num_unaccept_tokens)
+        seq.reset_for_new_round()
+        seq.append_token(new_token_id)
+        
     def resume_from_suspend(self):
         while self.suspend:
             seq = self.suspend.popleft()
             seq.status = SequenceStatus.RUNNING
-            seq.reset_for_new_round()
             self.running.append(seq)
 
     def schedule(self) -> tuple[list[Sequence], bool]:

@@ -1,6 +1,7 @@
 from copy import copy
 from enum import Enum, auto
 from itertools import count
+from typing import Optional
 
 from nanovllm.sampling_params import SamplingParams
 
@@ -16,14 +17,15 @@ class Sequence:
     block_size = 256
     counter = count()
 
-    def __init__(self, token_ids: list[int], sampling_params = SamplingParams()):
-        self.seq_id = next(Sequence.counter)
+    def __init__(self, token_ids: list[int], sampling_params = SamplingParams(), seq_id: Optional[int] = None):
+        self.seq_id = seq_id if seq_id else next(Sequence.counter)
         self.status = SequenceStatus.WAITING
         self.token_ids = copy(token_ids)
         self.last_token = token_ids[-1]
         self.num_tokens = len(self.token_ids)
         self.num_prompt_tokens = len(token_ids)
         self.num_prev_tokens = self.num_prompt_tokens
+        self.num_checked_logit_generated_tokens = self.num_prompt_tokens - 1
         self.num_cached_tokens = 0
         self.block_table = []
         self.temperature = sampling_params.temperature
@@ -49,6 +51,10 @@ class Sequence:
         return self.num_tokens - self.num_prev_tokens
     
     @property
+    def num_verify_tokens(self):
+        return self.num_tokens - self.num_checked_logit_generated_tokens
+    
+    @property
     def num_completion_tokens(self):
         return self.num_tokens - self.num_prompt_tokens    
     
@@ -63,6 +69,10 @@ class Sequence:
     @property
     def increase_token_ids(self):
         return self.token_ids[self.num_prev_tokens:]
+    
+    @property
+    def not_verify_token_ids(self):
+        return self.token_ids[self.num_checked_logit_generated_tokens:]
     
     @property
     def num_cached_blocks(self):
@@ -88,14 +98,18 @@ class Sequence:
     def extend_token(self, token_ids: list[int]):
         self.token_ids.extend(token_ids)
         self.last_token = token_ids[-1]
-        self.last_turn_token = token_ids
         self.num_tokens += len(token_ids)
+        
+    def delete_tokens(self, num_remove_tokens: int):
+        del self.token_ids[-num_remove_tokens:]
+        self.num_tokens -= num_remove_tokens
+        self.last_token = self.token_ids[-1]
 
     def __getstate__(self):
-        return (self.num_tokens, self.num_prompt_tokens, self.num_cached_tokens, self.num_prev_tokens, self.block_table, self.token_ids)
+        return (self.num_tokens, self.num_prompt_tokens, self.num_cached_tokens, self.num_checked_logit_generated_tokens, self.block_table, self.token_ids)
 
     def __setstate__(self, state):
-        self.num_tokens, self.num_prompt_tokens, self.num_cached_tokens, self.num_prev_tokens, self.block_table, self.token_ids= state
+        self.num_tokens, self.num_prompt_tokens, self.num_cached_tokens, self.num_checked_logit_generated_tokens, self.block_table, self.token_ids= state
 
 
     def reset_for_new_round(self):

@@ -16,6 +16,7 @@ class TargetScheduler:
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
         self.suspend: deque[Sequence] = deque()
+        self.seq_id_map = {}
     
     def is_finished(self):
         return not self.waiting and not self.running and not self.suspend
@@ -25,17 +26,18 @@ class TargetScheduler:
     
     def add(self, seq: Sequence):
         self.waiting.append(seq)
+        self.seq_id_map[seq.seq_id] = seq
         
-    def add_token_ids(self, token_ids_map, seq_id_map):
+    def add_token_ids(self, token_ids_map):
         for seq in self.waiting:
-            if seq_id_map[seq.seq_id] in token_ids_map:
+            if seq.seq_id in token_ids_map:
                 seq.reset_for_new_round()
-                seq.extend_token(token_ids_map[seq_id_map[seq.seq_id]])
+                seq.extend_token(token_ids_map[seq.seq_id])
                 
         for seq in self.suspend:
-            if seq_id_map[seq.seq_id] in token_ids_map:
+            if seq.seq_id in token_ids_map:
                 seq.reset_for_new_round()
-                seq.extend_token(token_ids_map[seq_id_map[seq.seq_id]])
+                seq.extend_token(token_ids_map[seq.seq_id])
 
     def resume_from_suspend(self):
         while self.suspend:
@@ -88,3 +90,12 @@ class TargetScheduler:
             seq.status = SequenceStatus.SUSPEND
             self.running.remove(seq)
             self.suspend.append(seq)
+            
+            
+    def verify_process(self, seq_id, num_unaccept_tokens, new_token_id):
+        seq = self.seq_id_map[seq_id]
+        if num_unaccept_tokens > 0:
+            self.block_manager.reclaim_tokens(seq, num_unaccept_tokens)
+            seq.delete_tokens(num_unaccept_tokens)
+        seq.reset_for_new_round()
+        seq.append_token(new_token_id)

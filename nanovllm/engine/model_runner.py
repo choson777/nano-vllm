@@ -160,7 +160,7 @@ class ModelRunner:
                 else:
                     end = start + seq.last_block_num_tokens 
                 slot_mapping.extend(list(range(start, end)))
-            start = seqlen_prev_q + seq.num_prev_tokens
+            start = seqlen_prev_q + seq.num_checked_logit_generated_tokens
             end = cu_seqlens_q[-1]
             logit_indexs.extend(list(range(start, end)))
         if cu_seqlens_k[-1] > cu_seqlens_q[-1]:    # prefix cache
@@ -203,15 +203,15 @@ class ModelRunner:
         block_tables = None
         for seq in seqs:
             seqlen = len(seq)
-            input_ids.extend(seq.increase_token_ids)
-            positions.extend(list(range(seq.num_prev_tokens, seqlen)))
-            seqlen_q = seqlen - seq.num_prev_tokens
+            input_ids.extend(seq.not_verify_token_ids)
+            positions.extend(list(range(seq.num_checked_logit_generated_tokens, seqlen)))
+            seqlen_q = seqlen - seq.num_checked_logit_generated_tokens
             seqlen_k = seqlen
             cu_seqlens_q.append(cu_seqlens_q[-1] + seqlen_q)
             cu_seqlens_k.append(cu_seqlens_k[-1] + seqlen_k)
             max_seqlen_q = max(seqlen_q, max_seqlen_q)
             max_seqlen_k = max(seqlen_k, max_seqlen_k)
-            token_start_index = seq.last_block_num_tokens - seq.num_increase_tokens
+            token_start_index = seq.last_block_num_tokens - seq.num_verify_tokens
             if token_start_index >= 0:
                 slot_mapping.extend(list(range(seq.block_table[-1] * seq.block_size + token_start_index, seq.block_table[-1] * seq.block_size + seq.last_block_num_tokens)))
             else:
@@ -229,10 +229,10 @@ class ModelRunner:
     def prepare_sample(self, seqs: list[Sequence]):
         temperatures = []
         for seq in seqs:
-            # if self.is_target and not self.is_warmup:
-            #     temperatures.extend([seq.temperature] * seq.num_increase_tokens)
-            # else:
-            temperatures.append(seq.temperature)
+            if self.is_target and not self.is_warmup:
+                temperatures.extend([seq.temperature] * seq.num_verify_tokens)
+            else:
+                temperatures.append(seq.temperature)
         temperatures = torch.tensor(temperatures, dtype=torch.float32, pin_memory=True).cuda(non_blocking=True)
         return temperatures
 
@@ -265,9 +265,7 @@ class ModelRunner:
         print(f"positions: {positions}")
         temperatures = self.prepare_sample(seqs) if self.rank == 0 else None
         logits = self.run_model(input_ids, positions, is_prefill)
-        token_ids = None
-        if not self.is_target:
-            token_ids = self.sampler(logits, temperatures).tolist() if self.rank == 0 else None
+        token_ids = self.sampler(logits, temperatures).tolist() if self.rank == 0 else None
         reset_context()
         return token_ids, logits
 

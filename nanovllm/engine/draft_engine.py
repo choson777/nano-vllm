@@ -58,3 +58,7 @@ class DraftEngine:
         for seq_id in seq_logits:
             seq_logits[seq_id] = torch.stack(seq_logits[seq_id])
         return outputs, seq_logits
+
+    
+    def verify_process(self, seq_id: int, unaccept_tokens: int, new_token_id: int):
+        self.scheduler.verify_process(seq_id, unaccept_tokens, new_token_id)

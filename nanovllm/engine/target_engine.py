@@ -41,8 +41,8 @@ class TargetEngine:
     def add_request(self, seq: Sequence):
         self.scheduler.add(seq)
         
-    def integrate_draft_output(self, outputs, seq_id_map):
-        self.scheduler.add_token_ids(outputs, seq_id_map)
+    def integrate_draft_output(self, outputs):
+        self.scheduler.add_token_ids(outputs)
 
     def is_round_finished(self):
         return self.scheduler.is_round_finished()
@@ -50,28 +50,30 @@ class TargetEngine:
     
     def step(self):
         seqs, is_prefill = self.scheduler.schedule()
-        _, logits = self.model_runner.call("run", seqs, is_prefill)
+        token_ids, logits = self.model_runner.call("run", seqs, is_prefill)
         self.scheduler.postprocess(seqs)
         seq_logits = {}
+        seq_outputs = {}
         start_index = 0
         for seq in seqs:
-            end_index = start_index + seq.num_increase_tokens
-            seq_logit = logits[start_index: end_index]
-            seq_logits[seq.seq_id] = seq_logit
+            end_index = start_index + seq.num_verify_tokens
+            seq_logits[seq.seq_id] = logits[start_index: end_index]
+            seq_outputs[seq.seq_id] = token_ids[start_index: end_index]
             start_index = end_index
-        return seq_logits
+        return seq_outputs, seq_logits
     
     
     def run(self):
         self.scheduler.resume_from_suspend()
+        seq_logits = {}
+        seq_outputs = {}
         while not self.is_round_finished():
-            seq_logits = self.step()
-            # for seq_id, logit in logits:
-            #     if seq_id not in seq_logits:
-            #         seq_logits[seq_id] = []
-            #     seq_logits[seq_id].append(logit)
-                
-            # for seq_id, token_ids in output:
-            #     outputs[seq_id] = token_ids
-        return seq_logits
-            
+            seq_output, seq_logit = self.step()
+            for seq_id in seq_logit:
+                seq_logits[seq_id] = seq_logit[seq_id]
+            for seq_id in seq_output:
+                seq_outputs[seq_id] = seq_output[seq_id]
+        return seq_outputs, seq_logits
+    
+    def verify_process(self, seq_id, num_unaccpet_tokens, new_token_id):
+        self.scheduler(seq_id, num_unaccpet_tokens, new_token_id)

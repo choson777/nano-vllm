@@ -143,3 +143,16 @@ class BlockManager:
             block_table.append(block_id)
         else:
             assert last_block.hash == -1
+            
+    def reclaim_tokens(self, seq: Sequence, num_tokens: int):
+        block_table = seq.block_table
+        last_block = self.blocks[block_table[-1]]
+        last_block_num_tokens = seq.last_block_num_tokens
+        if num_tokens >= last_block_num_tokens:
+            last_block.ref_count -= 1
+            if last_block.ref_count == 0:
+                self._deallocate_block(block_table[-1])
+                block_table.pop()
+            if num_tokens > last_block_num_tokens:
+                h = block_table[-1].hash
+                self.hash_to_block_id.pop(h)
