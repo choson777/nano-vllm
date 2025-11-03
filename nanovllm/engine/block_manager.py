@@ -98,28 +98,31 @@ class BlockManager:
         return len(self.free_block_ids) >= (len(seq) % self.block_size > 0 and len(seq) % self.block_size <= seq.num_increase_tokens)
 
     def may_append(self, seq: Sequence):
-        block_table = seq.block_table
-        last_block = self.blocks[block_table[-1]]
-        if len(seq) % self.block_size == 1:
-            assert last_block.hash != -1
-            block_id = self.free_block_ids[0]
-            self._allocate_block(block_id)
-            block_table.append(block_id)
-        elif len(seq) % self.block_size == 0:
-            assert last_block.hash == -1
-            token_ids = seq.block(seq.num_blocks-1)
-            prefix = self.blocks[block_table[-2]].hash if len(block_table) > 1 else -1
-            h = self.compute_hash(token_ids, prefix)
-            last_block.update(h, token_ids)
-            self.hash_to_block_id[h] = last_block.block_id
-        else:
-            assert last_block.hash == -1
-
+        try:
+            block_table = seq.block_table
+            last_block = self.blocks[block_table[-1]]
+            if len(seq) % self.block_size == 1:
+                assert last_block.hash != -1
+                block_id = self.free_block_ids[0]
+                self._allocate_block(block_id)
+                block_table.append(block_id)
+            elif len(seq) % self.block_size == 0:
+                assert last_block.hash == -1
+                token_ids = seq.block(seq.num_blocks-1)
+                prefix = self.blocks[block_table[-2]].hash if len(block_table) > 1 else -1
+                h = self.compute_hash(token_ids, prefix)
+                last_block.update(h, token_ids)
+                self.hash_to_block_id[h] = last_block.block_id
+            else:
+                assert last_block.hash == -1
+        except:
+            print(f"seq id {seq.seq_id} num tokens {seq.num_tokens} block table {seq.block_table} last_block hash {self.blocks[seq.block_table[-1]].hash}")
+        
     def may_append_mul_tokens(self, seq: Sequence):
         block_table = seq.block_table
         last_block = self.blocks[block_table[-1]]
         num_remain_tokens = len(seq) % self.block_size
-        num_new_tokens = seq.num_increase_tokens
+        num_new_tokens = seq.num_verify_tokens
         if num_remain_tokens == 0:
             assert last_block.hash == -1
             token_ids = seq.block(seq.num_blocks-1)
@@ -146,14 +149,19 @@ class BlockManager:
             assert last_block.hash == -1
             
     def reclaim_tokens(self, seq: Sequence, num_tokens: int):
+        print("重退block")
         block_table = seq.block_table
         last_block = self.blocks[block_table[-1]]
         last_block_num_tokens = seq.last_block_num_tokens
+        print(f"seq id {seq.seq_id} block table {seq.block_table} 回退{num_tokens}个token, 最后一个块的block数量是 {last_block_num_tokens}")
         if num_tokens >= last_block_num_tokens:
             last_block.ref_count -= 1
             if last_block.ref_count == 0:
                 self._deallocate_block(block_table[-1])
-                block_table.pop()
+                seq.block_table.pop()
             if num_tokens > last_block_num_tokens:
-                h = block_table[-1].hash
-                self.hash_to_block_id.pop(h)
+                seq.block_table[-1].hash = -1      
+        else:
+            if last_block.hash != -1:
+                last_block.hash = -1
+        print(f"block table 变成{seq.block_table}, 最后一个块的哈希{self.blocks[seq.block_table[-1]].hash}")

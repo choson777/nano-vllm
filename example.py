@@ -6,12 +6,12 @@ from transformers import AutoTokenizer
 def main():
     path = os.path.expanduser("/data3/lqc/models/qwen3-0.6b/")
     tokenizer = AutoTokenizer.from_pretrained(path)
-    llm = LLM(path, enforce_eager=True, tensor_parallel_size=2, gpu_memory_utilization=0.8)
+    llm = LLM(path, enforce_eager=True, tensor_parallel_size=1, gpu_memory_utilization=0.8)
 
     sampling_params = SamplingParams(temperature=0.6, max_tokens=256)
     prompts = [
         "introduce yourself",
-        "list all prime numbers within 100",
+        "list all prime numbers less than 100",
     ]
     prompts = [
         tokenizer.apply_chat_template(

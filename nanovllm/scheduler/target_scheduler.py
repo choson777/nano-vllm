@@ -97,3 +97,9 @@ class TargetScheduler:
             seq.delete_tokens(num_unaccept_tokens)
         seq.set_checked_tokens()
         seq.append_token(new_token_id)
+        if new_token_id == self.eos or seq.num_tokens >= seq.max_tokens:
+            seq.status = SequenceStatus.FINISHED
+            self.suspend.remove(seq)
+            self.block_manager.deallocate(seq)
+            self.seq_id_map.pop(seq_id)
+        return seq

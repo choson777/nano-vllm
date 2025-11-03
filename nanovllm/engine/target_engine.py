@@ -47,6 +47,8 @@ class TargetEngine:
     def is_round_finished(self):
         return self.scheduler.is_round_finished()
 
+    def is_finished(self):
+        return self.scheduler.is_finished()
     
     def step(self):
         seqs, is_prefill = self.scheduler.schedule()
@@ -76,4 +78,4 @@ class TargetEngine:
         return seq_outputs, seq_logits
     
     def verify_process(self, seq_id, num_unaccpet_tokens, new_token_id):
-        self.scheduler.verify_process(seq_id, num_unaccpet_tokens, new_token_id)
+        return self.scheduler.verify_process(seq_id, num_unaccpet_tokens, new_token_id)

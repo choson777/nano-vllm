@@ -216,7 +216,7 @@ class ModelRunner:
             if token_start_index >= 0:
                 slot_mapping.extend(list(range(seq.block_table[-1] * seq.block_size + token_start_index, seq.block_table[-1] * seq.block_size + seq.last_block_num_tokens)))
             else:
-                slot_mapping.extend(list(range(seq.block_table[-2] * seq.block_size + token_start_index, seq.block_table[-2] * seq.block_size + seq.block_size)))
+                slot_mapping.extend(list(range(seq.block_table[-2] * seq.block_size + seq.block_size + token_start_index, seq.block_table[-2] * seq.block_size + seq.block_size)))
                 slot_mapping.extend(list(range(seq.block_table[-1] * seq.block_size, seq.block_table[-1] * seq.block_size + seq.last_block_num_tokens)))
         block_tables = self.prepare_block_tables(seqs)
         input_ids = torch.tensor(input_ids, dtype=torch.int64, pin_memory=True).cuda(non_blocking=True)

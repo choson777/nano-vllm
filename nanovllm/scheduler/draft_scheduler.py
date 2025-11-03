@@ -22,6 +22,9 @@ class DraftScheduler:
         
     def is_round_finished(self):
         return not self.waiting and not self.running
+    
+    def is_finished(self):
+        return not self.waiting and not self.running and not self.suspend
 
     def add(self, seq: Sequence):
         self.waiting.append(seq)
@@ -34,6 +37,11 @@ class DraftScheduler:
             seq.delete_tokens(num_unaccept_tokens)
         seq.set_checked_tokens()
         seq.append_token(new_token_id)
+        if new_token_id == self.eos or seq.num_tokens >= seq.max_tokens:
+            seq.status = SequenceStatus.FINISHED
+            self.suspend.remove(seq)
+            self.block_manager.deallocate(seq)
+            self.seq_id_map.pop(seq_id)
         
     def resume_from_suspend(self):
         while self.suspend:
@@ -41,6 +49,7 @@ class DraftScheduler:
             seq.reset_for_new_round()
             seq.status = SequenceStatus.RUNNING
             self.running.append(seq)
+            
 
     def schedule(self) -> tuple[list[Sequence], bool]:
         # prefill
@@ -86,7 +95,7 @@ class DraftScheduler:
     def postprocess(self, seqs: list[Sequence], token_ids: list[int]):
         for seq, token_id in zip(seqs, token_ids):
             seq.append_token(token_id)
-            if (not seq.ignore_eos and token_id == self.eos) or seq.num_completion_tokens == seq.max_tokens or seq.num_increase_tokens == self.num_spec_tokens:
+            if (not seq.ignore_eos and token_id == self.eos) or seq.num_increase_tokens == self.num_spec_tokens:
                 seq.status = SequenceStatus.SUSPEND
                 self.running.remove(seq)
                 self.suspend.append(seq)
