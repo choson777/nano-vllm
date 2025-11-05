@@ -47,7 +47,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--prompt", type=str, default="To be or not to be,")
+    parser.add_argument("--prompt", type=str, default="1 + 1 = ?")
     parser.add_argument("--stream", action="store_true")
     args = parser.parse_args()
     prompt = args.prompt
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     print(f"Prompt: {prompt!r}\n", flush=True)
     response = post_http_request(prompt, api_url, stream)
 
-    data = json.loads(response.content)
+    data = json.loads(response.content)['text']
     print(data)
     
     # if stream:

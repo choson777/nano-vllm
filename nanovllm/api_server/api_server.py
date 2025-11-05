@@ -21,16 +21,11 @@ async def generate(request: Request):
     stream = request_dict.pop("stream", False)
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
-    # 调用 AsyncLLM 的 generate 方法，等待一步推理完成
-    step_output = await engine.generate(request_id, prompt, sampling_params)
 
-    # 假设 StepOutput 有 .new_token, .new_token_id, .is_finished 等属性
-    # 将 StepOutput 转换为 JSON 响应
+    output_tokens = await engine.generate(request_id, prompt, sampling_params)
+
     response_data = {
-        "request_id": step_output.request_id if hasattr(step_output, 'request_id') else request_id,
-        "text": step_output.new_token if hasattr(step_output, 'new_token') else "",
-        "token_id": step_output.new_token_id if hasattr(step_output, 'new_token_id') else None,
-        "is_finished": step_output.is_finished if hasattr(step_output, 'is_finished') else False,
+        "text": "".join(output_tokens),
         "status": "success"
     }
 

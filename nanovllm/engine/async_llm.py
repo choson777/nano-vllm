@@ -28,6 +28,7 @@ class AsyncLLM:
     async def engine_step(self):
         self.is_engine_running = True
         step_outputs = self.engine.step()
+        await asyncio.sleep(0)
         self.is_engine_running = False
         for step_output in step_outputs:
             seq_id = step_output.seq_id
@@ -40,13 +41,24 @@ class AsyncLLM:
         prompt: Optional[str] = None,
         sampling_params: SamplingParams = SamplingParams(),
     ):
-        
-        request_events = asyncio.Event()
-        self.request_events[request_id] = request_events
-        
+        request_event = asyncio.Event()
+        self.request_events[request_id] = request_event
+        output_tokens = []
         self.engine.add_request(request_id, prompt, sampling_params)
-        
-        if not self.is_engine_running:
-            await self.engine_step()
-        
-        return self.step_outputs[request_id]
+        while True:
+            if not self.is_engine_running:
+                await self.engine_step()
+            
+            await asyncio.wait_for(request_event.wait()) 
+            step_output = self.step_outputs[request_id]
+            output_tokens.append(step_output.new_token)
+            
+            if step_output.is_finished:
+                del self.request_events[request_id]
+                del self.step_outputs[request_id]
+                
+                if not self.is_engine_running:
+                    await self.engine_step()
+                break
+                
+        return output_tokens
