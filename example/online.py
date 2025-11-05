@@ -57,13 +57,16 @@ if __name__ == "__main__":
     print(f"Prompt: {prompt!r}\n", flush=True)
     response = post_http_request(prompt, api_url, stream)
 
-    if stream:
-        num_printed_lines = 0
-        for h in get_streaming_response(response):
-            time.sleep(0.1)
-            clear_line(num_printed_lines)
-            num_printed_lines += 1
-            print(h)
-    else:
-        output = get_response(response)
-        print(output)
+    data = json.loads(response.content)
+    print(data)
+    
+    # if stream:
+    #     num_printed_lines = 0
+    #     for h in get_streaming_response(response):
+    #         time.sleep(0.1)
+    #         clear_line(num_printed_lines)
+    #         num_printed_lines += 1
+    #         print(h)
+    # else:
+    #     output = get_response(response)
+    #     print(output)

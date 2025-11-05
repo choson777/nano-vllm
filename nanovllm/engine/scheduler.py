@@ -1,4 +1,5 @@
 from collections import deque
+import copy
 
 from nanovllm.config import Config
 from nanovllm.engine.sequence import Sequence, SequenceStatus
@@ -17,6 +18,7 @@ class Scheduler:
 
     def is_finished(self):
         return not self.waiting and not self.running
+    
 
     def add(self, seq: Sequence):
         self.waiting.append(seq)

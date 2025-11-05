@@ -13,10 +13,9 @@ class SequenceStatus(Enum):
 
 class Sequence:
     block_size = 256
-    counter = count()
 
-    def __init__(self, token_ids: list[int], sampling_params = SamplingParams()):
-        self.seq_id = next(Sequence.counter)
+    def __init__(self, seq_id: int, token_ids: list[int], sampling_params = SamplingParams()):
+        self.seq_id = seq_id
         self.status = SequenceStatus.WAITING
         self.token_ids = copy(token_ids)
         self.last_token = token_ids[-1]
