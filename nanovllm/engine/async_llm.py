@@ -27,9 +27,10 @@ class AsyncLLM:
         
     async def engine_step(self):
         self.is_engine_running = True
-        step_outputs = self.engine.step()
         await asyncio.sleep(0)
+        step_outputs = self.engine.step()
         self.is_engine_running = False
+        print(step_outputs)
         for step_output in step_outputs:
             seq_id = step_output.seq_id
             self.request_events[seq_id].set()
@@ -49,7 +50,8 @@ class AsyncLLM:
             if not self.is_engine_running:
                 await self.engine_step()
             
-            await asyncio.wait_for(request_event.wait()) 
+            await asyncio.wait_for(request_event.wait(), timeout=None)
+            request_event.clear()
             step_output = self.step_outputs[request_id]
             output_tokens.append(step_output.new_token)
             

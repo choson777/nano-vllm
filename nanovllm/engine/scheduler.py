@@ -55,7 +55,8 @@ class Scheduler:
                 num_seqs += 1
                 self.block_manager.may_append(seq)
                 scheduled_seqs.append(seq)
-        assert scheduled_seqs
+        if not scheduled_seqs:
+            return [], False
         self.running.extendleft(reversed(scheduled_seqs))
         return scheduled_seqs, False
 

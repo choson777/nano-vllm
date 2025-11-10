@@ -61,7 +61,11 @@ class LLMEngine:
         self.scheduler.add(seq)
 
     def step(self):
-        seqs, is_prefill = self.scheduler.schedule()         
+        seqs, is_prefill = self.scheduler.schedule()
+        print(f"这一轮调用的request的数量是{len(seqs)}, waiting队列长度为{self.scheduler.waiting}, running 队列长度为{self.scheduler.running}")
+        if not seqs:
+            print("No sequences scheduled, engine waiting for new requests or cache availability.")
+            return []        
         token_ids = self.model_runner.call("run", seqs, is_prefill)
         self.scheduler.postprocess(seqs, token_ids)
         outputs = [StepOutput(seq, self.tokenizer.decode(seq.last_token), seq.last_token) for seq in seqs]
