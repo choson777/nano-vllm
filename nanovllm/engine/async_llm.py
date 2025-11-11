@@ -24,17 +24,21 @@ class AsyncLLM:
         self.request_events = {}
         self.step_outputs = {}
         self.is_engine_running = False
+        self.kicking_request_id: Optional[str] = None
+        self.timeout_interval = 1
         
-    async def engine_step(self):
+    async def engine_step(self, kicking_request_id: Optional[str] = None):
         self.is_engine_running = True
+        self.kicking_request_id = kicking_request_id
         await asyncio.sleep(0)
         step_outputs = self.engine.step()
         self.is_engine_running = False
-        print(step_outputs)
+        self.kicking_request_id = None
         for step_output in step_outputs:
-            seq_id = step_output.seq_id
-            self.request_events[seq_id].set()
-            self.step_outputs[seq_id] = step_output
+            request_id = step_output.request_id
+            if request_id in self.request_events:
+                self.request_events[request_id].set()
+                self.step_outputs[request_id] = step_output
     
     async def generate(
         self,
@@ -44,16 +48,27 @@ class AsyncLLM:
     ):
         request_event = asyncio.Event()
         self.request_events[request_id] = request_event
-        output_tokens = []
         self.engine.add_request(request_id, prompt, sampling_params)
+        outputs = ""
         while True:
-            if not self.is_engine_running:
-                await self.engine_step()
+            if request_id not in self.request_events:
+                return
             
-            await asyncio.wait_for(request_event.wait(), timeout=None)
+            if not self.is_engine_running:
+                try:
+                    await self.engine_step()
+                except RuntimeError as e:
+                    await self.abort(request_id)
+                    raise e
+            
+            try:
+                await asyncio.wait_for(request_event.wait(), timeout=self.timeout_interval)
+            except asyncio.TimeoutError:
+                continue
             request_event.clear()
             step_output = self.step_outputs[request_id]
-            output_tokens.append(step_output.new_token)
+            outputs += step_output.new_token
+            yield outputs
             
             if step_output.is_finished:
                 del self.request_events[request_id]
@@ -62,5 +77,21 @@ class AsyncLLM:
                 if not self.is_engine_running:
                     await self.engine_step()
                 break
-                
-        return output_tokens
+    
+    async def abort(self, request_id: str):
+        if request_id not in self.request_events:
+            # The request has already finished or been aborted.
+            return
+
+        self.engine.abort_request(request_id)
+
+        if request_id in self.request_events:
+            del self.request_events[request_id]
+        if request_id in self.step_outputs:
+            del self.step_outputs[request_id]
+
+        # To prevent deadlock when a request is aborted while the engine is
+        # running.
+        if self.kicking_request_id == request_id:
+            self.is_engine_running = False
+            self.kicking_request_id = None

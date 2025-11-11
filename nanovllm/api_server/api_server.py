@@ -1,7 +1,9 @@
 import argparse
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from typing import AsyncGenerator
+from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 import uvicorn
+import json
 
 from nanovllm.utils.logger import init_logger
 from nanovllm import SamplingParams
@@ -21,15 +23,39 @@ async def generate(request: Request):
     stream = request_dict.pop("stream", False)
     sampling_params = SamplingParams(**request_dict)
     request_id = random_uuid()
+    results_generator = engine.generate(
+        request_id, prompt=prompt, sampling_params=sampling_params
+    )
+    
+    if stream:
+        # Streaming case
+        async def stream_results() -> AsyncGenerator[bytes, None]:
+            async for outputs in results_generator:
+                text_output = outputs
+                ret = {"text": text_output}
+                yield (json.dumps(ret) + "\0").encode("utf-8")
 
-    output_tokens = await engine.generate(request_id, prompt, sampling_params)
+        async def abort_request() -> None:
+            await engine.abort(request_id)
 
-    response_data = {
-        "text": "".join(output_tokens),
-        "status": "success"
-    }
+        background_tasks = BackgroundTasks()
+        # Abort the request if the client disconnects.
+        background_tasks.add_task(abort_request)
+        return StreamingResponse(stream_results(), background=background_tasks)
+    else:
+        # Non-streaming case
+        final_output = None
+        async for outputs in results_generator:
+            if await request.is_disconnected():
+                # Abort the request if the client disconnects.
+                await engine.abort(request_id)
+                return Response(status_code=499)
+            final_output = outputs
 
-    return JSONResponse(response_data)
+        assert final_output is not None
+        text_output = final_output
+        ret = {"text": text_output}
+        return JSONResponse(ret)
     
 
 

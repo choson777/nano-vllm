@@ -13,14 +13,16 @@ from nanovllm.engine.model_runner import ModelRunner
 
 class StepOutput:
     def __init__(self, seq: Sequence, new_token: str, new_token_id: int):
-        self.seq_id = seq.seq_id
+        self.request_id = seq.seq_id
+        self.request = seq
         self.new_token = new_token
         self.new_token_id = new_token_id
         self.is_finished = seq.is_finished
     
     def __repr__(self) -> str:
         return (
-            f"StepOutput(request_id={self.seq_id}, "
+            f"StepOutput(request_id={self.request_id}, "
+            f"request={self.request},"
             f"new_token={self.new_token}, "
             f"new_token_id={self.new_token_id}, "
             f"is_finished={self.is_finished})"
@@ -73,3 +75,6 @@ class LLMEngine:
 
     def is_finished(self):
         return self.scheduler.is_finished()
+
+    def abort_request(self, request_id: int):
+        self.scheduler.abort(request_id)

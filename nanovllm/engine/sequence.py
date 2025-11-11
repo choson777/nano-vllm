@@ -32,7 +32,7 @@ class Sequence:
 
     def __getitem__(self, key):
         return self.token_ids[key]
-
+        
     @property
     def is_finished(self):
         return self.status == SequenceStatus.FINISHED

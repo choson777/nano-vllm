@@ -72,3 +72,15 @@ class Scheduler:
                 seq.status = SequenceStatus.FINISHED
                 self.block_manager.deallocate(seq)
                 self.running.remove(seq)
+
+    def abort(self, seq_id: int):
+        for seq in self.running:
+            if seq_id == seq.seq_id:
+                seq.status = SequenceStatus.FINISHED
+                self.block_manager.deallocate(seq)
+                self.running.remove(seq)
+                return 
+        for seq in self.waiting:
+            if seq_id == seq.seq_id:
+                seq.status = SequenceStatus.FINISHED
+                self.waiting.remove(seq)

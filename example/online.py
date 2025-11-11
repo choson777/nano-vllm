@@ -20,7 +20,7 @@ def post_http_request(
     pload = {
         "prompt": prompt,
         "temperature": 0.6,
-        "max_tokens": 64,
+        "max_tokens": 128,
         "stream": stream,
     }
     response = requests.post(api_url, headers=headers, json=pload, stream=True)
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--prompt", type=str, default="1 + 1 = ?")
+    parser.add_argument("--prompt", type=str, default="To be or not to be,")
     parser.add_argument("--stream", action="store_true")
     args = parser.parse_args()
     prompt = args.prompt
@@ -57,16 +57,13 @@ if __name__ == "__main__":
     print(f"Prompt: {prompt!r}\n", flush=True)
     response = post_http_request(prompt, api_url, stream)
 
-    data = json.loads(response.content)['text']
-    print(data)
-    
-    # if stream:
-    #     num_printed_lines = 0
-    #     for h in get_streaming_response(response):
-    #         time.sleep(0.1)
-    #         clear_line(num_printed_lines)
-    #         num_printed_lines += 1
-    #         print(h)
-    # else:
-    #     output = get_response(response)
-    #     print(output)
+    if stream:
+        num_printed_lines = 0
+        for h in get_streaming_response(response):
+            time.sleep(0.1)
+            clear_line(num_printed_lines)
+            num_printed_lines += 1
+            print(h)
+    else:
+        output = get_response(response)
+        print(output)
