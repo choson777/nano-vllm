@@ -9,7 +9,7 @@ import torch
 from nanovllm.config import Config
 from nanovllm.sampling_params import SamplingParams
 from nanovllm.engine.request import Request
-from nanovllm.scheduler.draft_scheduler import DraftScheduler
+from nanovllm.scheduler.spec_scheduler import DraftScheduler
 from nanovllm.engine.model_runner import ModelRunner
 
 

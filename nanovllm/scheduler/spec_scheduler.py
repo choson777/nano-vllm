@@ -4,10 +4,10 @@ from typing import Optional
 from nanovllm.config import Config
 from nanovllm.engine.request import Request, RequestStatus
 from nanovllm.engine.block_manager import BlockManager
+from abc import ABC, abstractmethod
 
-
-class TargetScheduler:
-
+class BaseSpecScheduler(ABC):
+    
     def __init__(self, config: Config):
         self.max_num_reqs = config.max_num_reqs
         self.max_num_batched_tokens = config.max_num_batched_tokens
@@ -17,7 +17,7 @@ class TargetScheduler:
         self.running: deque[Request] = deque()
         self.suspend: deque[Request] = deque()
         self.request_map = {}
-    
+        
     def is_finished(self):
         return not self.waiting and not self.running and not self.suspend
     
@@ -28,23 +28,7 @@ class TargetScheduler:
         self.waiting.append(request)
         self.request_map[request.request_id] = request
         
-    def add_token_ids(self, token_ids_map):
-        for req in self.waiting:
-            if req.request_id in token_ids_map:
-                req.extend_token(token_ids_map[req.request_id])
-                
-        for req in self.suspend:
-            if req.request_id in token_ids_map:
-                req.extend_token(token_ids_map[req.request_id])
-
-    def resume_from_suspend(self):
-        while self.suspend:
-            req = self.suspend.popleft()
-            req.status = RequestStatus.RUNNING
-            self.running.append(req)
-    
     def schedule(self) -> tuple[list[Request], bool]:
-
         scheduled_reqs = []
         num_reqs = 0
         num_batched_tokens = 0
@@ -77,21 +61,43 @@ class TargetScheduler:
                 scheduled_reqs.append(req)
         assert scheduled_reqs
         self.running.extendleft(reversed(scheduled_reqs))
-        return scheduled_reqs, False    
+        return scheduled_reqs, False
     
     def preempt(self, req: Request):
         req.status = RequestStatus.WAITING
         self.block_manager.deallocate(req)
         self.waiting.appendleft(req)
         
-    def postprocess(self, reqs: list[Request]):
-        for req in reqs:
-            req.status = RequestStatus.SUSPEND
-            req.set_consume_tokens()
-            self.running.remove(req)
-            self.suspend.append(req)
-            
-            
+    def reset_hash_map(self):
+        self.block_manager.hash_to_block_id = {}
+        
+    @abstractmethod
+    def verify_process(self, req_id: int, num_unaccept_tokens: int, new_token_id: int):
+        pass
+    
+    @abstractmethod
+    def postprocess(self, reqs: list[Request], token_ids: Optional[list[int]] = None):
+        pass
+    
+    @abstractmethod
+    def resume_from_suspend(self):
+        pass
+    
+    
+class TargetScheduler(BaseSpecScheduler):
+    
+    def __init__(self, config: Config):
+        super().__init__(config)
+        
+    def add_token_ids(self, token_ids_map):
+        for req in self.waiting:
+            if req.request_id in token_ids_map:
+                req.extend_token(token_ids_map[req.request_id])
+                
+        for req in self.suspend:
+            if req.request_id in token_ids_map:
+                req.extend_token(token_ids_map[req.request_id])
+
     def verify_process(self, req_id, num_unaccept_tokens, new_token_id):
         req = self.request_map[req_id]
         if num_unaccept_tokens > 0:
@@ -105,6 +111,60 @@ class TargetScheduler:
             self.block_manager.deallocate(req)
             self.request_map.pop(req_id)
         return req
+            
+    def postprocess(self, reqs: list[Request], token_ids: Optional[list[int]] = None):
+        for req in reqs:
+            req.status = RequestStatus.SUSPEND
+            req.set_consume_tokens()
+            self.running.remove(req)
+            self.suspend.append(req)
+            
+    def resume_from_suspend(self):
+        while self.suspend:
+            req = self.suspend.popleft()
+            req.status = RequestStatus.RUNNING
+            self.running.append(req)
+            
+class DraftScheduler(BaseSpecScheduler):
     
-    def reset_hash_map(self):
-        self.block_manager.hash_to_block_id = {}
+    def __init__(self, config: Config, num_spec_tokens):
+        super().__init__(config)
+        self.num_spec_tokens = num_spec_tokens
+        
+    def verify_process(self, req_id, num_unaccept_tokens, new_token_id):
+        req = self.request_map[req_id]
+        if num_unaccept_tokens > 0:
+            self.block_manager.reclaim_tokens(req, num_unaccept_tokens)
+            req.delete_tokens(num_unaccept_tokens)
+            req.set_consume_tokens()
+        req.append_token(new_token_id)
+        if new_token_id == self.eos or req.num_completion_tokens >= req.max_tokens:
+            req.status = RequestStatus.FINISHED
+            self.suspend.remove(req)
+            self.block_manager.deallocate(req)
+            self.request_map.pop(req_id)
+            self.block_manager.hash_to_block_id = dict()
+            
+            
+    def resume_from_suspend(self):
+        while self.suspend:
+            req = self.suspend.popleft()
+            req.reset_for_new_round()
+            req.status = RequestStatus.RUNNING
+            self.running.append(req)
+
+
+    def postprocess(self, reqs: list[Request], token_ids: list[int]):
+        for req, token_id in zip(reqs, token_ids):
+            req.set_consume_tokens()
+            req.append_token(token_id)
+            req.one_round_generated_tokens += 1
+            if (not req.ignore_eos and token_id == self.eos) or req.one_round_generated_tokens == self.num_spec_tokens:
+                req.status = RequestStatus.SUSPEND
+                self.running.remove(req)
+                self.suspend.append(req)
+                
+    def free_block(self, reqs):
+        for req in reqs:
+            self.block_manager.deallocate(req)
+            req.status = RequestStatus.FINISHED

@@ -42,7 +42,9 @@ class SpeculativeEngine:
         self.draft_config.eos = self.tokenizer.eos_token_id
         self.target_config.eos = self.tokenizer.eos_token_id
         self.target_engine = TargetEngine(target_model, **asdict(self.target_config))
+        print("成功初始化了target engine")
         self.draft_engine = DraftEngine(draft_model, num_turn_spec_tokens=4, **asdict(self.draft_config))
+        print("成功初始化了draft engine")
         
         
     def add_request(self, prompt, sampling_param):

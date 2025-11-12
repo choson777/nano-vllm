@@ -8,7 +8,7 @@ import torch.multiprocessing as mp
 from nanovllm.config import Config
 from nanovllm.sampling_params import SamplingParams
 from nanovllm.engine.request import Request
-from nanovllm.scheduler.target_scheduler import TargetScheduler
+from nanovllm.scheduler.spec_scheduler import TargetScheduler
 from nanovllm.engine.model_runner import ModelRunner
 
 
