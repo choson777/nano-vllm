@@ -1,13 +1,16 @@
 from nanovllm.engine.llm_engine import LLMEngine
+from nanovllm.engine.request import Request, RequestStatus
 from nanovllm.engine.draft_engine import DraftEngine
 from nanovllm.engine.target_engine import TargetEngine
 from nanovllm.config import Config, DraftConfig, TargetConfig
+from nanovllm import SamplingParams
 from dataclasses import fields, asdict
 from collections import defaultdict
 
 from transformers import AutoTokenizer
-from nanovllm.engine.sequence import Sequence
 import torch
+import tqdm
+from time import perf_counter
 
 class SpeculativeEngine:
     
@@ -42,30 +45,27 @@ class SpeculativeEngine:
         self.draft_engine = DraftEngine(draft_model, num_turn_spec_tokens=4, **asdict(self.draft_config))
         
         
-    def add_request(self, prompts, sampling_params):
-        if not isinstance(sampling_params, list):
-            sampling_params = [sampling_params] * len(prompts)
-        for prompt, sp in zip(prompts, sampling_params):
-            if isinstance(prompt, str):
-                prompt = self.tokenizer.encode(prompt)
-            target_seq = Sequence(prompt, sp)
-            draft_seq = Sequence(prompt, sp, target_seq.seq_id)
-            self.target_engine.add_request(target_seq) 
-            self.draft_engine.add_request(draft_seq)
+    def add_request(self, prompt, sampling_param):
+        if isinstance(prompt, str):
+            prompt = self.tokenizer.encode(prompt)
+        target_req = Request(prompt, sampling_param)
+        draft_req = Request(prompt, sampling_param, target_req.request_id)
+        self.target_engine.add_request(target_req) 
+        self.draft_engine.add_request(draft_req)
     
     
-    def verify(self, draft_seq_logits, target_seq_logits, draft_outputs, target_outputs):
-        common_seq_ids = set(draft_seq_logits.keys()) & set(target_seq_logits.keys())
+    def verify(self, draft_req_logits, target_req_logits, draft_outputs, target_outputs):
+        common_req_ids = set(draft_req_logits.keys()) & set(target_req_logits.keys())
         verbose = False
         outputs = []
-        for seq_id in common_seq_ids:
-            draft_logits = draft_seq_logits[seq_id]
-            target_logits = target_seq_logits[seq_id]
-            draft_token_ids = draft_outputs[seq_id]
-            target_token_ids = target_outputs[seq_id]
+        for req_id in common_req_ids:
+            draft_logits = draft_req_logits[req_id]
+            target_logits = target_req_logits[req_id]
+            draft_token_ids = draft_outputs[req_id]
+            target_token_ids = target_outputs[req_id]
             num_round_generate = len(draft_token_ids)
             num_unaccept_tokens = num_round_generate
-            # print(f"seq {seq_id} draft logit shape {draft_logits.shape} target_logit shape {target_logits.shape} {draft_token_ids} {target_token_ids}")
+            # print(f"req {req_id} draft logit shape {draft_logits.shape} target_logit shape {target_logits.shape} {draft_token_ids} {target_token_ids}")
             for i in range(num_round_generate):    
                 r = torch.rand(1, device=draft_logits.device)
                 draft_logit = draft_logits[i]
@@ -75,40 +75,48 @@ class SpeculativeEngine:
                     break
                 
                 if verbose:
-                    print(f"seq id{seq_id}, r is {r}, accpeted token{draft_token_ids[i]}")
+                    print(f"req id{req_id}, r is {r}, accpeted token{draft_token_ids[i]}")
                 
                 if draft_token_id == self.eos:
                     break
                 num_unaccept_tokens -= 1
             new_token_id = target_token_ids[num_round_generate - num_unaccept_tokens]
-            self.draft_engine.verify_process(seq_id, num_unaccept_tokens, new_token_id)
-            seq = self.target_engine.verify_process(seq_id, num_unaccept_tokens, new_token_id)
-            outputs.append(seq)
-            print(f"seq id {seq_id} unaccept token {num_unaccept_tokens}")
+            self.draft_engine.verify_process(req_id, num_unaccept_tokens, new_token_id)
+            req = self.target_engine.verify_process(req_id, num_unaccept_tokens, new_token_id)
+            outputs.append(req)
+            # print(f"req id {req_id} unaccept token {num_unaccept_tokens}")
         return outputs        
     
     def one_round(self):
         print("========================draft=======================")
-        draft_outputs, draft_seq_logits_map = self.draft_engine.run()
+        draft_outputs, draft_req_logits_map = self.draft_engine.run()
         print(draft_outputs)
         print("========================target=======================")
         self.target_engine.integrate_draft_output(draft_outputs)
-        target_outputs, target_seq_logits_map = self.target_engine.run()
+        target_outputs, target_req_logits_map = self.target_engine.run()
         print(target_outputs)
         print("========================verify=======================")
-        outputs = self.verify(draft_seq_logits_map, target_seq_logits_map, draft_outputs, target_outputs)
+        outputs = self.verify(draft_req_logits_map, target_req_logits_map, draft_outputs, target_outputs)
         return outputs
     
     def is_finished(self):
         return self.target_engine.is_finished() and self.draft_engine.is_finished()
     
     
-    def generate(self):
+    def generate(
+        self,
+        prompts: list[str] | list[list[int]],
+        sampling_params: SamplingParams | list[SamplingParams],
+        ):
+        if not isinstance(sampling_params, list):
+            sampling_params = [sampling_params] * len(prompts)
+        for prompt, sp in zip(prompts, sampling_params):
+            self.add_request(prompt, sp)
         outputs = {}
         while not self.is_finished():
             output = self.one_round()
-            for seq in output:
-                outputs[seq.seq_id] = seq.token_ids
-        outputs = [outputs[seq_id] for seq_id in sorted(outputs.keys())]
+            for req in output:
+                outputs[req.request_id] = req.token_ids
+        outputs = [outputs[req_id] for req_id in sorted(outputs.keys())]
         outputs = [{"text": self.tokenizer.decode(token_ids), "token_ids": token_ids} for token_ids in outputs]
         return outputs

@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 
 from nanovllm.config import Config
 from nanovllm.sampling_params import SamplingParams
-from nanovllm.engine.sequence import Sequence
+from nanovllm.engine.request import Request
 from nanovllm.scheduler.target_scheduler import TargetScheduler
 from nanovllm.engine.model_runner import ModelRunner
 
@@ -38,8 +38,8 @@ class TargetEngine:
         for p in self.ps:
             p.join()
             
-    def add_request(self, seq: Sequence):
-        self.scheduler.add(seq)
+    def add_request(self, req: Request):
+        self.scheduler.add(req)
         
     def integrate_draft_output(self, outputs):
         self.scheduler.add_token_ids(outputs)
@@ -51,31 +51,31 @@ class TargetEngine:
         return self.scheduler.is_finished()
     
     def step(self):
-        seqs, is_prefill = self.scheduler.schedule()
-        token_ids, logits = self.model_runner.call("run", seqs, is_prefill)
-        self.scheduler.postprocess(seqs)
-        seq_logits = {}
-        seq_outputs = {}
+        reqs, is_prefill = self.scheduler.schedule()
+        token_ids, logits = self.model_runner.call("run", reqs, is_prefill)
+        self.scheduler.postprocess(reqs)
+        req_logits = {}
+        req_outputs = {}
         start_index = 0
-        for seq in seqs:
-            end_index = start_index + seq.num_verify_tokens
-            seq_logits[seq.seq_id] = logits[start_index: end_index]
-            seq_outputs[seq.seq_id] = token_ids[start_index: end_index]
+        for req in reqs:
+            end_index = start_index + req.num_unchecked_tokens
+            req_logits[req.request_id] = logits[start_index: end_index]
+            req_outputs[req.request_id] = token_ids[start_index: end_index]
             start_index = end_index
-        return seq_outputs, seq_logits
+        return req_outputs, req_logits
     
     
     def run(self):
         self.scheduler.resume_from_suspend()
-        seq_logits = {}
-        seq_outputs = {}
+        req_logits = {}
+        req_outputs = {}
         while not self.is_round_finished():
-            seq_output, seq_logit = self.step()
-            for seq_id in seq_logit:
-                seq_logits[seq_id] = seq_logit[seq_id]
-            for seq_id in seq_output:
-                seq_outputs[seq_id] = seq_output[seq_id]
-        return seq_outputs, seq_logits
+            req_output, req_logit = self.step()
+            for req_id in req_logit:
+                req_logits[req_id] = req_logit[req_id]
+            for req_id in req_output:
+                req_outputs[req_id] = req_output[req_id]
+        return req_outputs, req_logits
     
-    def verify_process(self, seq_id, num_unaccpet_tokens, new_token_id):
-        return self.scheduler.verify_process(seq_id, num_unaccpet_tokens, new_token_id)
+    def verify_process(self, req_id, num_unaccpet_tokens, new_token_id):
+        return self.scheduler.verify_process(req_id, num_unaccpet_tokens, new_token_id)

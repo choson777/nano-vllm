@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 
 from nanovllm.config import Config
 from nanovllm.sampling_params import SamplingParams
-from nanovllm.engine.sequence import Sequence
+from nanovllm.engine.request import Request
 from nanovllm.scheduler.scheduler import Scheduler
 from nanovllm.engine.model_runner import ModelRunner
 
@@ -42,15 +42,15 @@ class LLMEngine:
     def add_request(self, prompt: str | list[int], sampling_params: SamplingParams):
         if isinstance(prompt, str):
             prompt = self.tokenizer.encode(prompt)
-        seq = Sequence(prompt, sampling_params)
-        self.scheduler.add(seq)
+        req = Request(prompt, sampling_params)
+        self.scheduler.add(req)
 
     def step(self):
-        seqs, is_prefill = self.scheduler.schedule()
-        token_ids, _ = self.model_runner.call("run", seqs, is_prefill)
-        self.scheduler.postprocess(seqs, token_ids)
-        outputs = [(seq.seq_id, seq.completion_token_ids) for seq in seqs if seq.is_finished]
-        num_tokens = sum(len(seq) for seq in seqs) if is_prefill else -len(seqs)
+        reqs, is_prefill = self.scheduler.schedule()
+        token_ids, _ = self.model_runner.call("run", reqs, is_prefill)
+        self.scheduler.postprocess(reqs, token_ids)
+        outputs = [(req.request_id, req.completion_token_ids) for req in reqs if req.is_finished]
+        num_tokens = sum(len(req) for req in reqs) if is_prefill else -len(reqs)
         return outputs, num_tokens
 
     def is_finished(self):
@@ -82,13 +82,11 @@ class LLMEngine:
                     "Prefill": f"{int(prefill_throughput)}tok/s",
                     "Decode": f"{int(decode_throughput)}tok/s",
                 })
-            for seq_id, token_ids in output:
-                outputs[seq_id] = token_ids
+            for req_id, token_ids in output:
+                outputs[req_id] = token_ids
                 if use_tqdm:
                     pbar.update(1)
-        outputs = [outputs[seq_id] for seq_id in sorted(outputs.keys())]
-        for token_ids in outputs:
-            print(token_ids[:4])
+        outputs = [outputs[req_id] for req_id in sorted(outputs.keys())]
         outputs = [{"text": self.tokenizer.decode(token_ids), "token_ids": token_ids} for token_ids in outputs]
         if use_tqdm:
             pbar.close()

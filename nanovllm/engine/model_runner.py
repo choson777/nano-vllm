@@ -5,7 +5,7 @@ from multiprocessing.synchronize import Event
 from multiprocessing.shared_memory import SharedMemory
 
 from nanovllm.config import Config
-from nanovllm.engine.sequence import Sequence
+from nanovllm.engine.request import Request
 from nanovllm.models.qwen3 import Qwen3ForCausalLM
 from nanovllm.layers.sampler import Sampler
 from nanovllm.utils.context import set_context, get_context, reset_context
@@ -99,9 +99,9 @@ class ModelRunner:
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
         max_num_batched_tokens, max_model_len = self.config.max_num_batched_tokens, self.config.max_model_len
-        num_seqs = min(max_num_batched_tokens // max_model_len, self.config.max_num_seqs)
-        seqs = [Sequence([0] * max_model_len) for _ in range(num_seqs)]
-        self.run(seqs, True)
+        num_reqs = min(max_num_batched_tokens // max_model_len, self.config.max_num_reqs)
+        reqs = [Request([0] * max_model_len) for _ in range(num_reqs)]
+        self.run(reqs, True)
         torch.cuda.empty_cache()
         self.is_warmup=False
 
@@ -124,116 +124,106 @@ class ModelRunner:
                 module.v_cache = self.kv_cache[1, layer_id]
                 layer_id += 1
 
-    def prepare_block_tables(self, seqs: list[Sequence]):
-        max_len = max(len(seq.block_table) for seq in seqs)
-        block_tables = [seq.block_table + [-1] * (max_len - len(seq.block_table)) for seq in seqs]
+    def prepare_block_tables(self, reqs: list[Request]):
+        max_len = max(len(req.block_table) for req in reqs)
+        block_tables = [req.block_table + [-1] * (max_len - len(req.block_table)) for req in reqs]
         block_tables = torch.tensor(block_tables, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         return block_tables
 
-    def prepare_prefill(self, seqs: list[Sequence]):
+    def prepare_prefill(self, reqs: list[Request]):
         input_ids = []
         positions = []
-        cu_seqlens_q = [0]
-        cu_seqlens_k = [0]
-        max_seqlen_q = 0
-        max_seqlen_k = 0
+        cu_reqlens_q = [0]
+        cu_reqlens_k = [0]
+        max_reqlen_q = 0
+        max_reqlen_k = 0
         slot_mapping = []
         block_tables = None
         logit_indexs = []
-        for seq in seqs:
-            seqlen = len(seq)
-            input_ids.extend(seq[seq.num_cached_tokens:])
-            positions.extend(list(range(seq.num_cached_tokens, seqlen)))
-            seqlen_q = seqlen - seq.num_cached_tokens
-            seqlen_k = seqlen
-            seqlen_prev_q = cu_seqlens_q[-1]
-            cu_seqlens_q.append(cu_seqlens_q[-1] + seqlen_q)
-            cu_seqlens_k.append(cu_seqlens_k[-1] + seqlen_k)
-            max_seqlen_q = max(seqlen_q, max_seqlen_q)
-            max_seqlen_k = max(seqlen_k, max_seqlen_k)
-            if not seq.block_table:    # warmup
+        for req in reqs:
+            reqlen = len(req)
+            input_ids.extend(req[req.num_consume_tokens:])
+            positions.extend(list(range(req.num_consume_tokens, reqlen)))
+            reqlen_q = reqlen - req.num_consume_tokens
+
+            reqlen_k = reqlen
+            cu_reqlens_q.append(cu_reqlens_q[-1] + reqlen_q)
+            cu_reqlens_k.append(cu_reqlens_k[-1] + reqlen_k)
+            max_reqlen_q = max(reqlen_q, max_reqlen_q)
+            max_reqlen_k = max(reqlen_k, max_reqlen_k)
+            
+            start = cu_reqlens_q[-2] + req.num_checked_tokens - req.num_consume_tokens
+            end = cu_reqlens_q[-1]
+            logit_indexs.extend(list(range(start, end)))
+            if not req.block_table:    # warmup
                 continue
-            for i in range(seq.num_cached_blocks, seq.num_blocks):
-                start = seq.block_table[i] * self.block_size
-                if i != seq.num_blocks - 1:
+            for i in range(req.num_cached_blocks, req.num_blocks):
+                start = req.block_table[i] * self.block_size
+                if i != req.num_blocks - 1:
                     end = start + self.block_size
                 else:
-                    end = start + seq.last_block_num_tokens 
+                    end = start + req.last_block_num_tokens 
                 slot_mapping.extend(list(range(start, end)))
-            start = seqlen_prev_q + seq.num_checked_logit_generated_tokens
-            end = cu_seqlens_q[-1]
-            logit_indexs.extend(list(range(start, end)))
-        if cu_seqlens_k[-1] > cu_seqlens_q[-1]:    # prefix cache
-            block_tables = self.prepare_block_tables(seqs)
-        input_ids = torch.tensor(input_ids, dtype=torch.int64, pin_memory=True).cuda(non_blocking=True)
-        positions = torch.tensor(positions, dtype=torch.int64, pin_memory=True).cuda(non_blocking=True)
-        cu_seqlens_q = torch.tensor(cu_seqlens_q, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
-        cu_seqlens_k = torch.tensor(cu_seqlens_k, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
-        slot_mapping = torch.tensor(slot_mapping, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
-        logit_indexs = torch.tensor(logit_indexs, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
-        is_target_flag = self.is_target and not self.is_warmup
-        set_context(True, is_target_flag, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, slot_mapping, None, block_tables, logit_indexs)
-        return input_ids, positions
 
-    def prepare_decode(self, seqs: list[Sequence]):
-        input_ids = []
-        positions = []
-        slot_mapping = []
-        context_lens = []
-        for seq in seqs:
-            input_ids.append(seq.last_token)
-            positions.append(len(seq) - 1)
-            context_lens.append(len(seq))
-            slot_mapping.append(seq.block_table[-1] * self.block_size + seq.last_block_num_tokens  - 1)
+        if cu_reqlens_k[-1] > cu_reqlens_q[-1]:    # prefix cache
+            block_tables = self.prepare_block_tables(reqs)
         input_ids = torch.tensor(input_ids, dtype=torch.int64, pin_memory=True).cuda(non_blocking=True)
         positions = torch.tensor(positions, dtype=torch.int64, pin_memory=True).cuda(non_blocking=True)
+        cu_reqlens_q = torch.tensor(cu_reqlens_q, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
+        cu_reqlens_k = torch.tensor(cu_reqlens_k, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         slot_mapping = torch.tensor(slot_mapping, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
-        context_lens = torch.tensor(context_lens, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
-        block_tables = self.prepare_block_tables(seqs)
-        set_context(False, False, slot_mapping=slot_mapping, context_lens=context_lens, block_tables=block_tables)
+        print(logit_indexs)
+        logit_indexs = torch.tensor(logit_indexs, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
+        set_context(True, cu_reqlens_q, cu_reqlens_k, max_reqlen_q, max_reqlen_k, slot_mapping, None, block_tables, logit_indexs)
         return input_ids, positions
     
-    def prepare_target_decode(self, seqs: list[Sequence]):
+    def prepare_decode(self, reqs: list[Request]):
         input_ids = []
         positions = []
-        cu_seqlens_q = [0]
-        cu_seqlens_k = [0]
-        max_seqlen_q = 0
-        max_seqlen_k = 0
+        cu_reqlens_q = [0]
+        cu_reqlens_k = [0]
+        max_reqlen_q = 0
+        max_reqlen_k = 0
         slot_mapping = []
         block_tables = None
-        for seq in seqs:
-            seqlen = len(seq)
-            input_ids.extend(seq.not_verify_token_ids)
-            positions.extend(list(range(seq.num_checked_logit_generated_tokens, seqlen)))
-            seqlen_q = seqlen - seq.num_checked_logit_generated_tokens
-            seqlen_k = seqlen
-            cu_seqlens_q.append(cu_seqlens_q[-1] + seqlen_q)
-            cu_seqlens_k.append(cu_seqlens_k[-1] + seqlen_k)
-            max_seqlen_q = max(seqlen_q, max_seqlen_q)
-            max_seqlen_k = max(seqlen_k, max_seqlen_k)
-            token_start_index = seq.last_block_num_tokens - seq.num_verify_tokens
+        logit_indexs = []
+        for req in reqs:
+            reqlen = len(req)
+            input_ids.extend(req.token_ids[req.num_consume_tokens:])
+            positions.extend(list(range(req.num_consume_tokens, reqlen)))
+            reqlen_q = reqlen - req.num_consume_tokens
+            reqlen_k = reqlen
+            cu_reqlens_q.append(cu_reqlens_q[-1] + reqlen_q)
+            cu_reqlens_k.append(cu_reqlens_k[-1] + reqlen_k)
+            max_reqlen_q = max(reqlen_q, max_reqlen_q)
+            max_reqlen_k = max(reqlen_k, max_reqlen_k)
+            token_start_index = req.last_block_num_tokens - (req.num_tokens - req.num_consume_tokens)
             if token_start_index >= 0:
-                slot_mapping.extend(list(range(seq.block_table[-1] * seq.block_size + token_start_index, seq.block_table[-1] * seq.block_size + seq.last_block_num_tokens)))
+                slot_mapping.extend(list(range(req.block_table[-1] * req.block_size + token_start_index, req.block_table[-1] * req.block_size + req.last_block_num_tokens)))
             else:
-                slot_mapping.extend(list(range(seq.block_table[-2] * seq.block_size + seq.block_size + token_start_index, seq.block_table[-2] * seq.block_size + seq.block_size)))
-                slot_mapping.extend(list(range(seq.block_table[-1] * seq.block_size, seq.block_table[-1] * seq.block_size + seq.last_block_num_tokens)))
-        block_tables = self.prepare_block_tables(seqs)
+                slot_mapping.extend(list(range(req.block_table[-2] * req.block_size + req.block_size + token_start_index, req.block_table[-2] * req.block_size + req.block_size)))
+                slot_mapping.extend(list(range(req.block_table[-1] * req.block_size, req.block_table[-1] * req.block_size + req.last_block_num_tokens)))
+            if not self.is_target:
+                logit_indexs.append(cu_reqlens_q[-1] - 1)
+            
+        block_tables = self.prepare_block_tables(reqs)
         input_ids = torch.tensor(input_ids, dtype=torch.int64, pin_memory=True).cuda(non_blocking=True)
         positions = torch.tensor(positions, dtype=torch.int64, pin_memory=True).cuda(non_blocking=True)
-        cu_seqlens_q = torch.tensor(cu_seqlens_q, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
-        cu_seqlens_k = torch.tensor(cu_seqlens_k, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
+        cu_reqlens_q = torch.tensor(cu_reqlens_q, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
+        cu_reqlens_k = torch.tensor(cu_reqlens_k, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         slot_mapping = torch.tensor(slot_mapping, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
-        set_context(False, True, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, slot_mapping, None, block_tables)
+        if not self.is_target:
+            logit_indexs = torch.tensor(logit_indexs, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
+        else:
+            logit_indexs = None
+        set_context(False, cu_reqlens_q, cu_reqlens_k, max_reqlen_q, max_reqlen_k, slot_mapping, None, block_tables, logit_indexs)
         return input_ids, positions
     
-    def prepare_sample(self, seqs: list[Sequence]):
+    def prepare_sample(self, reqs: list[Request], is_prefill):
         temperatures = []
-        for seq in seqs:
-            if self.is_target and not self.is_warmup:
-                temperatures.extend([seq.temperature] * seq.num_verify_tokens)
-            else:
-                temperatures.append(seq.temperature)
+        for req in reqs:
+            num_per_req_temperatures = req.num_tokens - req.num_checked_tokens if is_prefill else req.num_tokens - req.num_consume_tokens
+            temperatures.extend([req.temperature] * num_per_req_temperatures)
         temperatures = torch.tensor(temperatures, dtype=torch.float32, pin_memory=True).cuda(non_blocking=True)
         return temperatures
 
@@ -256,12 +246,9 @@ class ModelRunner:
             graph.replay()
             return self.model.compute_logits(graph_vars["outputs"][:bs])
 
-    def run(self, seqs: list[Sequence], is_prefill: bool) -> list[int]:
-        if self.is_target:
-            input_ids, positions = self.prepare_prefill(seqs) if is_prefill else self.prepare_target_decode(seqs)
-        else:
-            input_ids, positions = self.prepare_prefill(seqs) if is_prefill else self.prepare_decode(seqs)
-        temperatures = self.prepare_sample(seqs) if self.rank == 0 else None
+    def run(self, reqs: list[Request], is_prefill: bool) -> list[int]:
+        input_ids, positions = self.prepare_prefill(reqs) if is_prefill else self.prepare_decode(reqs)
+        temperatures = self.prepare_sample(reqs, is_prefill) if self.rank == 0 else None
         logits = self.run_model(input_ids, positions, is_prefill)
         token_ids = self.sampler(logits, temperatures).tolist() if self.rank == 0 else None
         reset_context()
@@ -271,7 +258,7 @@ class ModelRunner:
     def capture_cudagraph(self):
         config = self.config
         hf_config = config.hf_config
-        max_bs = min(self.config.max_num_seqs, 512)
+        max_bs = min(self.config.max_num_reqs, 512)
         max_num_blocks = (config.max_model_len + self.block_size - 1) // self.block_size
         input_ids = torch.zeros(max_bs, dtype=torch.int64)
         positions = torch.zeros(max_bs, dtype=torch.int64)
