@@ -58,7 +58,6 @@ class ParallelLMHead(VocabParallelEmbedding):
 
     def forward(self, x: torch.Tensor):
         context = get_context()
-        print(context.logit_indexs)
         if context.logit_indexs is not None:
             x = x[context.logit_indexs].contiguous()
         logits = F.linear(x, self.weight)

@@ -45,18 +45,21 @@ def main():
     ]
     # warm up
     with torch.no_grad():
-        for _ in range(5):
+        for i in range(5):
+            print(i)
             _ = spec_llm.generate(prompts, SamplingParams(temperature=0.6, max_tokens=4))
+            spec_llm.reset_block_manager()
     total_time = 0
     total_tokens = 0    
     with torch.no_grad():
-        for i in range(1):
+        for i in range(3):
             print(i)
             start_time = time.time()
             outputs = spec_llm.generate(prompts, sampling_params)
             end_time = time.time()
             total_time += end_time - start_time
             total_tokens += len(outputs[0]['token_ids'])
+            spec_llm.reset_block_manager()
     
     for prompt, output in zip(prompts, outputs):
         print("\n")

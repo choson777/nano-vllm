@@ -67,3 +67,7 @@ class DraftEngine:
     
     def verify_process(self, req_id: int, unaccept_tokens: int, new_token_id: int):
         self.scheduler.verify_process(req_id, unaccept_tokens, new_token_id)
+        
+        
+    def reset_block_manager(self):
+        self.scheduler.reset_hash_map()

@@ -26,7 +26,6 @@ class Request:
         self.num_tokens = len(self.token_ids)
         self.num_prompt_tokens = len(token_ids)
         self.num_cached_tokens = 0
-        self.num_checked_tokens = self.num_prompt_tokens - 1
         self.num_consume_tokens = 0
         self.one_round_generated_tokens = 0
 
@@ -51,10 +50,6 @@ class Request:
         return self.status == RequestStatus.SUSPEND
     
     @property
-    def num_unchecked_tokens(self):
-        return self.num_tokens - self.num_checked_tokens
-    
-    @property
     def num_completion_tokens(self):
         return self.num_tokens - self.num_prompt_tokens    
     
@@ -69,10 +64,6 @@ class Request:
     @property
     def one_round_generated_token_ids(self):
         return self.token_ids[-self.one_round_generated_tokens:]
-    
-    @property
-    def unchecked_token_ids(self):
-        return self.token_ids[self.num_checked_tokens:]
     
     @property
     def unconsume_token_ids(self):
@@ -110,17 +101,14 @@ class Request:
         self.last_token = self.token_ids[-1]
 
     def __getstate__(self):
-        return (self.num_tokens, self.last_token, self.num_prompt_tokens, self.num_cached_tokens, self.num_checked_tokens, self.num_consume_tokens, self.block_table, self.token_ids)
+        return (self.num_tokens, self.last_token, self.num_prompt_tokens, self.num_cached_tokens, self.num_consume_tokens, self.block_table, self.token_ids)
 
     def __setstate__(self, state):
-        self.num_tokens, self.last_token, self.num_prompt_tokens, self.num_cached_tokens, self.num_checked_tokens, self.num_consume_tokens, self.block_table, self.token_ids= state
+        self.num_tokens, self.last_token, self.num_prompt_tokens, self.num_cached_tokens, self.num_consume_tokens, self.block_table, self.token_ids= state
 
 
     def reset_for_new_round(self):
-        self.one_round_generated_tokens
-        
-    def set_checked_tokens(self):
-        self.num_checked_tokens = self.num_tokens
+        self.one_round_generated_tokens = 0
         
     def set_consume_tokens(self):
         self.num_consume_tokens = self.num_tokens

@@ -53,15 +53,18 @@ class TargetEngine:
     def step(self):
         reqs, is_prefill = self.scheduler.schedule()
         token_ids, logits = self.model_runner.call("run", reqs, is_prefill)
-        self.scheduler.postprocess(reqs)
         req_logits = {}
         req_outputs = {}
         start_index = 0
         for req in reqs:
-            end_index = start_index + req.num_unchecked_tokens
+            if is_prefill:
+                end_index = start_index + req.num_tokens - (req.num_prompt_tokens - 1)
+            else:
+                end_index = start_index + req.num_tokens - req.num_consume_tokens
             req_logits[req.request_id] = logits[start_index: end_index]
             req_outputs[req.request_id] = token_ids[start_index: end_index]
             start_index = end_index
+        self.scheduler.postprocess(reqs)
         return req_outputs, req_logits
     
     
@@ -79,3 +82,6 @@ class TargetEngine:
     
     def verify_process(self, req_id, num_unaccpet_tokens, new_token_id):
         return self.scheduler.verify_process(req_id, num_unaccpet_tokens, new_token_id)
+    
+    def reset_block_manager(self):
+        self.scheduler.reset_hash_map()

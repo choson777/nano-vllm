@@ -71,7 +71,7 @@ class BlockManager:
                 block = self._allocate_block(block_id)
             else:
                 request.num_cached_tokens += self.block_size
-                request.num_consume_tokens += request.num_cached_tokens
+                request.num_consume_tokens += self.block_size
                 if block_id in self.used_block_ids:
                     block = self.blocks[block_id]
                     block.ref_count += 1
@@ -90,7 +90,6 @@ class BlockManager:
                 self._deallocate_block(block_id)
         request.num_cached_tokens = 0
         request.num_consume_tokens = 0
-        request.num_checked_tokens = request.num_tokens - 1
         request.block_table.clear()
 
     def can_append(self, request: Request) -> bool:

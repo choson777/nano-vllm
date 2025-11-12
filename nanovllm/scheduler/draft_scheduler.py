@@ -96,6 +96,7 @@ class DraftScheduler:
 
     def postprocess(self, reqs: list[Request], token_ids: list[int]):
         for req, token_id in zip(reqs, token_ids):
+            req.set_consume_tokens()
             req.append_token(token_id)
             req.one_round_generated_tokens += 1
             if (not req.ignore_eos and token_id == self.eos) or req.one_round_generated_tokens == self.num_spec_tokens:
@@ -107,3 +108,6 @@ class DraftScheduler:
         for req in reqs:
             self.block_manager.deallocate(req)
             req.status = RequestStatus.FINISHED
+            
+    def reset_hash_map(self):
+        self.block_manager.hash_to_block_id = {}

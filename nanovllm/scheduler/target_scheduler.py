@@ -87,6 +87,7 @@ class TargetScheduler:
     def postprocess(self, reqs: list[Request]):
         for req in reqs:
             req.status = RequestStatus.SUSPEND
+            req.set_consume_tokens()
             self.running.remove(req)
             self.suspend.append(req)
             
@@ -104,3 +105,6 @@ class TargetScheduler:
             self.block_manager.deallocate(req)
             self.request_map.pop(req_id)
         return req
+    
+    def reset_hash_map(self):
+        self.block_manager.hash_to_block_id = {}

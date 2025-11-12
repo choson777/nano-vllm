@@ -28,5 +28,13 @@ def main():
         )
         for prompt in prompts
     ]
+    
+    outputs = spec_llm.generate(prompts, sampling_params)
+    for prompt, output in zip(prompts, outputs):
+        print("\n")
+        print(f"Prompt: {prompt!r}")
+        print(f"Completion: {output['text']!r}")
+
+    
 if __name__ == '__main__':
     main()

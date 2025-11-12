@@ -28,7 +28,7 @@ class ModelRunner:
         self.is_distributed = (self.world_size > 1)
         if self.is_distributed:
             if not dist.is_initialized():
-                dist.init_process_group("nccl", f"tcp://localhost:2333", world_size=self.world_size, rank=rank)
+                dist.init_process_group("nccl", f"tcp://localhost:2336", world_size=self.world_size, rank=rank)
         torch.cuda.set_device(rank)
         default_dtype = torch.get_default_dtype()
         torch.set_default_dtype(hf_config.torch_dtype)
@@ -152,7 +152,7 @@ class ModelRunner:
             max_reqlen_q = max(reqlen_q, max_reqlen_q)
             max_reqlen_k = max(reqlen_k, max_reqlen_k)
             
-            start = cu_reqlens_q[-2] + req.num_checked_tokens - req.num_consume_tokens
+            start = cu_reqlens_q[-2] + req.num_prompt_tokens - 1 - req.num_consume_tokens
             end = cu_reqlens_q[-1]
             logit_indexs.extend(list(range(start, end)))
             if not req.block_table:    # warmup
@@ -172,7 +172,6 @@ class ModelRunner:
         cu_reqlens_q = torch.tensor(cu_reqlens_q, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         cu_reqlens_k = torch.tensor(cu_reqlens_k, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         slot_mapping = torch.tensor(slot_mapping, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
-        print(logit_indexs)
         logit_indexs = torch.tensor(logit_indexs, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         set_context(True, cu_reqlens_q, cu_reqlens_k, max_reqlen_q, max_reqlen_k, slot_mapping, None, block_tables, logit_indexs)
         return input_ids, positions
@@ -216,14 +215,17 @@ class ModelRunner:
             logit_indexs = torch.tensor(logit_indexs, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         else:
             logit_indexs = None
-        set_context(False, cu_reqlens_q, cu_reqlens_k, max_reqlen_q, max_reqlen_k, slot_mapping, None, block_tables, logit_indexs)
+        set_context(req.num_tokens - req.num_consume_tokens > 1, cu_reqlens_q, cu_reqlens_k, max_reqlen_q, max_reqlen_k, slot_mapping, None, block_tables, logit_indexs)
         return input_ids, positions
     
     def prepare_sample(self, reqs: list[Request], is_prefill):
         temperatures = []
         for req in reqs:
-            num_per_req_temperatures = req.num_tokens - req.num_checked_tokens if is_prefill else req.num_tokens - req.num_consume_tokens
-            temperatures.extend([req.temperature] * num_per_req_temperatures)
+            if not self.is_target:
+                temperatures.append(req.temperature)
+            else:
+                num_per_req_temperatures = req.num_tokens - (req.num_prompt_tokens - 1) if is_prefill else req.num_tokens - req.num_consume_tokens
+                temperatures.extend([req.temperature] * num_per_req_temperatures)
         temperatures = torch.tensor(temperatures, dtype=torch.float32, pin_memory=True).cuda(non_blocking=True)
         return temperatures
 

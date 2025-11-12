@@ -88,19 +88,23 @@ class SpeculativeEngine:
         return outputs        
     
     def one_round(self):
-        print("========================draft=======================")
+        # print("========================draft=======================")
         draft_outputs, draft_req_logits_map = self.draft_engine.run()
-        print(draft_outputs)
-        print("========================target=======================")
+        # print(draft_outputs)
+        # print("========================target=======================")
         self.target_engine.integrate_draft_output(draft_outputs)
         target_outputs, target_req_logits_map = self.target_engine.run()
-        print(target_outputs)
-        print("========================verify=======================")
+        # print(target_outputs)
+        # print("========================verify=======================")
         outputs = self.verify(draft_req_logits_map, target_req_logits_map, draft_outputs, target_outputs)
         return outputs
     
     def is_finished(self):
         return self.target_engine.is_finished() and self.draft_engine.is_finished()
+    
+    def reset_block_manager(self):
+        self.target_engine.reset_block_manager()
+        self.draft_engine.reset_block_manager()
     
     
     def generate(
