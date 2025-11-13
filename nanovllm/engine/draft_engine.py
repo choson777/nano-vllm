@@ -16,12 +16,14 @@ from nanovllm.engine.model_runner import ModelRunner
 class DraftEngine:
 
     def __init__(self, model, num_turn_spec_tokens, **kwargs):
+        print("进来了 有这个进程")
         config_fields = {field.name for field in fields(Config)}
         config_kwargs = {k: v for k, v in kwargs.items() if k in config_fields}
         config = Config(model, **config_kwargs)
         self.model_runner = ModelRunner(config, 0, [])
         self.scheduler = DraftScheduler(config, num_turn_spec_tokens)
         atexit.register(self.exit)
+        print(f"初始化了draft model")
 
     def exit(self):
         self.model_runner.call("exit")
@@ -36,8 +38,12 @@ class DraftEngine:
         token_ids, logits = self.model_runner.call("run", reqs, is_prefill)
         self.scheduler.postprocess(reqs, token_ids)
         outputs = [(req.request_id, req.one_round_generated_token_ids) for req in reqs if (req.is_suspend or req.is_finished)]
-        req_id_to_logits = [(req.request_id, logit) for req, logit in zip(reqs, logits)]
-        return outputs, req_id_to_logits
+        req_id_to_selected_logit = []
+        for req, logit_tensor, selected_token_id in zip(reqs, logits, token_ids):
+            selected_logit_val = logit_tensor[selected_token_id].item()  # float
+            req_id_to_selected_logit.append((req.request_id, selected_logit_val))
+
+        return outputs, req_id_to_selected_logit
 
     def is_round_finished(self):
         return self.scheduler.is_round_finished()
@@ -49,7 +55,6 @@ class DraftEngine:
         self.scheduler.resume_from_suspend()
         req_logits = {}
         outputs = {}
-        i = 0
         while not self.is_round_finished():
             output, logits = self.step()
             for req_id, logit in logits:
@@ -59,9 +64,6 @@ class DraftEngine:
                 
             for req_id, token_ids in output:
                 outputs[req_id] = token_ids
-            i += 1
-        for req_id in req_logits:
-            req_logits[req_id] = torch.stack(req_logits[req_id])
         return outputs, req_logits
 
     

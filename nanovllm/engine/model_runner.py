@@ -1,6 +1,7 @@
 import pickle
 import torch
 import torch.distributed as dist
+import os
 from multiprocessing.synchronize import Event
 from multiprocessing.shared_memory import SharedMemory
 
@@ -30,6 +31,7 @@ class ModelRunner:
             if not dist.is_initialized():
                 dist.init_process_group("nccl", f"tcp://localhost:2336", world_size=self.world_size, rank=rank)
         torch.cuda.set_device(rank)
+        self.device = torch.device(f"cuda:{rank}")
 
         
         default_dtype = torch.get_default_dtype()
@@ -40,6 +42,7 @@ class ModelRunner:
         self.sampler = Sampler()
         self.warmup_model()
         self.allocate_kv_cache()
+        print(f"Initialized on GPU {torch.cuda.current_device()}, PID={os.getpid()}")
         if not self.enforce_eager:
             self.capture_cudagraph()
         torch.set_default_device("cpu")
