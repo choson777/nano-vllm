@@ -4,6 +4,7 @@ from time import perf_counter
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer
 import torch.multiprocessing as mp
+from typing import Optional
 
 from nanovllm.config import Config
 from nanovllm.sampling_params import SamplingParams
@@ -11,6 +12,23 @@ from nanovllm.engine.request import Request
 from nanovllm.scheduler.scheduler import Scheduler
 from nanovllm.engine.model_runner import ModelRunner
 
+
+class StepOutput:
+    def __init__(self, req: Request, new_token: str, new_token_id: int):
+        self.request_id = req.request_id
+        self.request = req
+        self.new_token = new_token
+        self.new_token_id = new_token_id
+        self.is_finished = req.is_finished
+    
+    def __repr__(self) -> str:
+        return (
+            f"StepOutput(request_id={self.request_id}, "
+            f"request={self.request},"
+            f"new_token={self.new_token}, "
+            f"new_token_id={self.new_token_id}, "
+            f"is_finished={self.is_finished})"
+        )
 
 class LLMEngine:
 
@@ -39,23 +57,29 @@ class LLMEngine:
         for p in self.ps:
             p.join()
 
-    def add_request(self, prompt: str | list[int], sampling_params: SamplingParams):
+    def add_request(self, prompt: str | list[int], sampling_params: SamplingParams, request_id: Optional[int] = None ):
         if isinstance(prompt, str):
             prompt = self.tokenizer.encode(prompt)
-        req = Request(prompt, sampling_params)
+        req = Request(prompt, sampling_params, request_id)
         self.scheduler.add(req)
 
     def step(self):
         reqs, is_prefill = self.scheduler.schedule()
+        print(f"这一轮调用的request的数量是{len(reqs)}, waiting队列长度为{self.scheduler.waiting}, running 队列长度为{self.scheduler.running}")
+        if not reqs:
+            print("No sequences scheduled, engine waiting for new requests or cache availability.")
+            return []        
         token_ids, _ = self.model_runner.call("run", reqs, is_prefill)
         self.scheduler.postprocess(reqs, token_ids)
-        outputs = [(req.request_id, req.completion_token_ids) for req in reqs if req.is_finished]
-        num_tokens = sum(len(req) for req in reqs) if is_prefill else -len(reqs)
-        return outputs, num_tokens
+        outputs = [StepOutput(req, self.tokenizer.decode(req.last_token), req.last_token) for req in reqs]
+        return outputs
 
     def is_finished(self):
         return self.scheduler.is_finished()
 
+    def abort_request(self, request_id: int):
+        self.scheduler.abort(request_id)
+    
     def generate(
         self,
         prompts: list[str] | list[list[int]],

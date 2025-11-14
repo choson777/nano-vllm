@@ -188,10 +188,12 @@ class ModelRunner:
         slot_mapping = []
         block_tables = None
         logit_indexs = []
+        context_lens = []
         for req in reqs:
             reqlen = len(req)
             input_ids.extend(req.token_ids[req.num_consume_tokens:])
             positions.extend(list(range(req.num_consume_tokens, reqlen)))
+            context_lens.append(len(req))
             reqlen_q = reqlen - req.num_consume_tokens
             reqlen_k = reqlen
             cu_reqlens_q.append(cu_reqlens_q[-1] + reqlen_q)
@@ -213,11 +215,12 @@ class ModelRunner:
         cu_reqlens_q = torch.tensor(cu_reqlens_q, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         cu_reqlens_k = torch.tensor(cu_reqlens_k, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         slot_mapping = torch.tensor(slot_mapping, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
+        context_lens = torch.tensor(context_lens, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         if not self.is_target:
             logit_indexs = torch.tensor(logit_indexs, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         else:
             logit_indexs = None
-        set_context(req.num_tokens - req.num_consume_tokens > 1, cu_reqlens_q, cu_reqlens_k, max_reqlen_q, max_reqlen_k, slot_mapping, None, block_tables, logit_indexs)
+        set_context(req.num_tokens - req.num_consume_tokens > 1, cu_reqlens_q, cu_reqlens_k, max_reqlen_q, max_reqlen_k, slot_mapping, context_lens, block_tables, logit_indexs)
         return input_ids, positions
     
     def prepare_sample(self, reqs: list[Request], is_prefill):

@@ -53,7 +53,8 @@ class Scheduler:
                 num_reqs += 1
                 self.block_manager.may_append(req)
                 scheduled_reqs.append(req)
-        assert scheduled_reqs
+        if not scheduled_reqs:
+            return [], False
         self.running.extendleft(reversed(scheduled_reqs))
         return scheduled_reqs, False
 
@@ -64,8 +65,21 @@ class Scheduler:
 
     def postprocess(self, reqs: list[Request], token_ids: list[int]) -> list[bool]:
         for req, token_id in zip(reqs, token_ids):
+            req.set_consume_tokens()
             req.append_token(token_id)
             if (not req.ignore_eos and token_id == self.eos) or req.num_completion_tokens == req.max_tokens:
                 req.status = RequestStatus.FINISHED
                 self.block_manager.deallocate(req)
                 self.running.remove(req)
+                
+    def abort(self, req_id: int):
+        for req in self.running:
+            if req_id == req.request_id:
+                req.status = RequestStatus.FINISHED
+                self.block_manager.deallocate(req)
+                self.running.remove(req)
+                return 
+        for req in self.waiting:
+            if req_id == req.request_id:
+                req.status = RequestStatus.FINISHED
+                self.waiting.remove(req)
