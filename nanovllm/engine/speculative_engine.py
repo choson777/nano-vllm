@@ -104,6 +104,8 @@ def _draft_worker(
                     req_id, num_unaccept_tokens, new_token_id = data
                     draft_engine.verify_process(req_id, num_unaccept_tokens, new_token_id)
                     verify_process_over_event.set()
+                elif cmd == "reset_block_manager":
+                    draft_engine.reset_block_manager()
                 elif cmd == "exit":
                     break
                     
@@ -290,8 +292,8 @@ class SpeculativeEngine:
         return self.target_engine.is_finished()
     
     def reset_block_manager(self):
+        self.draft_request_queue.put(("reset_block_manager", None))
         self.target_engine.reset_block_manager()
-        self.draft_engine.reset_block_manager()
     
     
     def generate(
