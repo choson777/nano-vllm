@@ -25,10 +25,14 @@ async def generate(request: Request):
     if stream:
         # Streaming case
         async def stream_results() -> AsyncGenerator[bytes, None]:
-            async for outputs in results_generator:
-                text_output = outputs
-                ret = {"text": text_output}
-                yield (json.dumps(ret) + "\0").encode("utf-8")
+            try:
+                async for outputs in results_generator:
+                    text_output = outputs
+                    ret = {"text": text_output}
+                    yield (json.dumps(ret) + "\0").encode("utf-8")
+            except Exception as e:
+                print("🔥 streaming exception:", e)
+                pass
 
         async def abort_request() -> None:
             await engine.abort(request_id)

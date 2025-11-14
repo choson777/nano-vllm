@@ -53,8 +53,7 @@ class Scheduler:
                 num_reqs += 1
                 self.block_manager.may_append(req)
                 scheduled_reqs.append(req)
-        if not scheduled_reqs:
-            return [], False
+        assert scheduled_reqs
         self.running.extendleft(reversed(scheduled_reqs))
         return scheduled_reqs, False
 

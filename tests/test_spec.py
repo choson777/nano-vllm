@@ -12,7 +12,7 @@ def main():
     # /data3/lqc/models/qwen3-0.6b/
     target_model_path = os.path.expanduser("/data3/szf_hf/huggingface/model/Qwen3-8B/")
     tokenizer = AutoTokenizer.from_pretrained(target_model_path)
-    spec_llm = SpeculativeEngine(draft_model_path, target_model_path)
+    spec_llm = SpeculativeEngine(target_model_path, draft_model_path)
     print("✅ SpeculativeEngine initialized successfully!")
     sampling_params = SamplingParams(temperature=0.6, max_tokens=50)
 

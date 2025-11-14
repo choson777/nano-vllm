@@ -11,24 +11,8 @@ from nanovllm.sampling_params import SamplingParams
 from nanovllm.engine.request import Request
 from nanovllm.scheduler.scheduler import Scheduler
 from nanovllm.engine.model_runner import ModelRunner
+from nanovllm.utils.util import StepOutput
 
-
-class StepOutput:
-    def __init__(self, req: Request, new_token: str, new_token_id: int):
-        self.request_id = req.request_id
-        self.request = req
-        self.new_token = new_token
-        self.new_token_id = new_token_id
-        self.is_finished = req.is_finished
-    
-    def __repr__(self) -> str:
-        return (
-            f"StepOutput(request_id={self.request_id}, "
-            f"request={self.request},"
-            f"new_token={self.new_token}, "
-            f"new_token_id={self.new_token_id}, "
-            f"is_finished={self.is_finished})"
-        )
 
 class LLMEngine:
 
@@ -64,11 +48,12 @@ class LLMEngine:
         self.scheduler.add(req)
 
     def step(self):
+        if self.scheduler.is_finished():
+            print("No sequences scheduled, engine waiting for new requests or cache availability.")       
+            return []
         reqs, is_prefill = self.scheduler.schedule()
-        print(f"这一轮调用的request的数量是{len(reqs)}, waiting队列长度为{self.scheduler.waiting}, running 队列长度为{self.scheduler.running}")
-        if not reqs:
-            print("No sequences scheduled, engine waiting for new requests or cache availability.")
-            return []        
+        # print(f"这一轮调用的request的数量是{len(reqs)}, waiting队列长度为{self.scheduler.waiting}, running 队列长度为{self.scheduler.running}")
+            
         token_ids, _ = self.model_runner.call("run", reqs, is_prefill)
         self.scheduler.postprocess(reqs, token_ids)
         outputs = [StepOutput(req, self.tokenizer.decode(req.last_token), req.last_token) for req in reqs]

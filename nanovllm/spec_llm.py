@@ -1,11 +1,11 @@
-from nanovllm.engine.llm_engine import LLMEngine
+from nanovllm.engine.speculative_engine import SpeculativeEngine
 from nanovllm.sampling_params import SamplingParams
 
 from typing import Optional
 import asyncio
 
 
-class LLM(LLMEngine):
+class SpecLLM(SpeculativeEngine):
     pass
 
 class AsyncLLM:
@@ -13,18 +13,11 @@ class AsyncLLM:
 
     def __init__(
         self,
-        model: str,
-        enforce_eager: bool = True,
-        tensor_parallel_size: int = 1,
-        gpu_memory_utilization: float = 0.90,
+        target_model: str,
+        draft_model: str,
         **kwargs,
     ):
-        self.engine = LLMEngine(
-            model, 
-            enforce_eager=enforce_eager, 
-            tensor_parallel_size=tensor_parallel_size,
-            gpu_memory_utilization=gpu_memory_utilization,
-            **kwargs)
+        self.engine = SpeculativeEngine(target_model, draft_model, **kwargs)
         self.request_events = {}
         self.step_outputs = {}
         self.is_engine_running = False

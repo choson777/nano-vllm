@@ -1,23 +1,21 @@
-from nanovllm.engine.llm_engine import LLMEngine
-from nanovllm.engine.request import Request, RequestStatus
+from nanovllm.engine.request import Request
 from nanovllm.engine.draft_engine import DraftEngine
 from nanovllm.engine.target_engine import TargetEngine
-from nanovllm.config import Config, DraftConfig, TargetConfig
+from nanovllm.config import DraftConfig, TargetConfig
 from nanovllm import SamplingParams
-from dataclasses import fields, asdict
-from collections import defaultdict
+from nanovllm.utils.util import StepOutput
 
+
+from dataclasses import asdict
 from transformers import AutoTokenizer
 import torch
-import tqdm
-from time import perf_counter
 
 class SpeculativeEngine:
     
     def __init__(
         self,
-        draft_model: str,
         target_model: str,
+        draft_model: str,
         num_speculative_tokens: int = 4,
         random_seed: int = 42,
         **kwargs
@@ -85,11 +83,11 @@ class SpeculativeEngine:
             new_token_id = target_token_ids[num_round_generate - num_unaccept_tokens]
             self.draft_engine.verify_process(req_id, num_unaccept_tokens, new_token_id)
             req = self.target_engine.verify_process(req_id, num_unaccept_tokens, new_token_id)
-            outputs.append(req)
+            outputs.append(StepOutput(req, req))
             # print(f"req id {req_id} unaccept token {num_unaccept_tokens}")
         return outputs        
     
-    def one_round(self):
+    def step(self):
         # print("========================draft=======================")
         draft_outputs, draft_req_logits_map = self.draft_engine.run()
         # print(draft_outputs)
@@ -120,7 +118,7 @@ class SpeculativeEngine:
             self.add_request(prompt, sp)
         outputs = {}
         while not self.is_finished():
-            output = self.one_round()
+            output = self.step()
             for req in output:
                 outputs[req.request_id] = req.token_ids
         outputs = [outputs[req_id] for req_id in sorted(outputs.keys())]

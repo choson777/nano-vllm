@@ -20,7 +20,7 @@ def post_http_request(
     pload = {
         "prompt": prompt,
         "temperature": 0.6,
-        "max_tokens": 128,
+        "max_tokens": 50,
         "stream": stream,
     }
     response = requests.post(api_url, headers=headers, json=pload, stream=True)
