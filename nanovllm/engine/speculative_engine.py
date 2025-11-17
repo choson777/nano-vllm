@@ -45,11 +45,11 @@ class SpeculativeEngine:
         print("成功初始化了draft engine")
         
         
-    def add_request(self, prompt, sampling_param):
+    def add_request(self, prompt, sampling_param, request_id=None):
         if isinstance(prompt, str):
             prompt = self.tokenizer.encode(prompt)
-        target_req = Request(prompt, sampling_param)
-        draft_req = Request(prompt, sampling_param, target_req.request_id)
+        target_req = Request(prompt, sampling_param, request_id)
+        draft_req = Request(prompt, sampling_param, request_id if request_id else target_req.request_id)
         self.target_engine.add_request(target_req) 
         self.draft_engine.add_request(draft_req)
     
@@ -83,20 +83,25 @@ class SpeculativeEngine:
             new_token_id = target_token_ids[num_round_generate - num_unaccept_tokens]
             self.draft_engine.verify_process(req_id, num_unaccept_tokens, new_token_id)
             req = self.target_engine.verify_process(req_id, num_unaccept_tokens, new_token_id)
-            outputs.append(StepOutput(req, req))
-            # print(f"req id {req_id} unaccept token {num_unaccept_tokens}")
+            generated_tokens = target_token_ids[:num_round_generate - num_unaccept_tokens + 1]
+            outputs.append(StepOutput(req, self.tokenizer.decode(generated_tokens), generated_tokens))
+            print(f"req id {req_id} unaccept token {num_unaccept_tokens}")
         return outputs        
     
     def step(self):
-        # print("========================draft=======================")
+        if self.is_finished():
+            print("没有需要推理的")
+            return []
+        print("========================draft=======================")
         draft_outputs, draft_req_logits_map = self.draft_engine.run()
         # print(draft_outputs)
-        # print("========================target=======================")
+        print("========================target=======================")
         self.target_engine.integrate_draft_output(draft_outputs)
         target_outputs, target_req_logits_map = self.target_engine.run()
         # print(target_outputs)
-        # print("========================verify=======================")
+        print("========================verify=======================")
         outputs = self.verify(draft_req_logits_map, target_req_logits_map, draft_outputs, target_outputs)
+        # print(outputs)
         return outputs
     
     def is_finished(self):
@@ -106,7 +111,11 @@ class SpeculativeEngine:
         self.target_engine.reset_block_manager()
         self.draft_engine.reset_block_manager()
     
-    
+    def abort_request(self, request_id: int):
+        self.target_engine.abort(request_id)
+        self.draft_engine.abort(request_id)
+        
+        
     def generate(
         self,
         prompts: list[str] | list[list[int]],
@@ -119,8 +128,10 @@ class SpeculativeEngine:
         outputs = {}
         while not self.is_finished():
             output = self.step()
-            for req in output:
-                outputs[req.request_id] = req.token_ids
+            for step_output in output:
+                if step_output.request_id not in outputs:
+                    outputs[step_output.request_id] = []
+                outputs[step_output.request_id] += step_output.new_token_id
         outputs = [outputs[req_id] for req_id in sorted(outputs.keys())]
         outputs = [{"text": self.tokenizer.decode(token_ids), "token_ids": token_ids} for token_ids in outputs]
         return outputs

@@ -1,5 +1,5 @@
 import uuid
-from nanovllm import Request
+from nanovllm.engine.request import Request
 
 class StepOutput:
     def __init__(self, req: Request, new_token: str, new_token_id: int | list[int]):

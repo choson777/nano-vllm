@@ -31,7 +31,7 @@ async def coordinator(url, prompts):
             
             # 3. 如果不是最后一个请求，等待0.5秒再发起下一个
             if i < len(prompts) - 1:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.5)
                 print(f"[{time.strftime('%H:%M:%S')}] ⏸️  等待0.5秒后发起请求 {i+2}")
         
         # 4. 按完成顺序处理结果（而非发起顺序）

@@ -19,6 +19,7 @@ def main():
     prompts = [
         "introduce yourself",
         "list all prime numbers less than 100",
+        "解释牛顿第一定律",
     ]
     prompts = [
         tokenizer.apply_chat_template(

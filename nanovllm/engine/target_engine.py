@@ -52,6 +52,7 @@ class TargetEngine:
     
     def step(self):
         reqs, is_prefill = self.scheduler.schedule()
+        print(f"这轮调用的reqs是:{reqs} {is_prefill}")
         token_ids, logits = self.model_runner.call("run", reqs, is_prefill)
         req_logits = {}
         req_outputs = {}
@@ -85,3 +86,6 @@ class TargetEngine:
     
     def reset_block_manager(self):
         self.scheduler.reset_hash_map()
+        
+    def abort(self, request_id:int):
+        self.scheduler.abort(request_id)

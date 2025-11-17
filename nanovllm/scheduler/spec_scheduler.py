@@ -71,6 +71,19 @@ class BaseSpecScheduler(ABC):
     def reset_hash_map(self):
         self.block_manager.hash_to_block_id = {}
         
+    def abort(self, req_id: int):
+        req = self.request_map[req_id]
+        req.status = RequestStatus.FINISHED
+        del self.request_map[req_id]
+        if req in self.suspend:
+            self.suspend.remove(req)
+            self.block_manager.deallocate(req)
+        elif req in self.running:
+            self.running.remove(req)
+            self.block_manager.deallocate(req)
+        elif req in self.waiting:
+            self.waiting.remove(req)
+        
     @abstractmethod
     def verify_process(self, req_id: int, num_unaccept_tokens: int, new_token_id: int):
         pass

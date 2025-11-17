@@ -65,7 +65,7 @@ class AsyncLLM:
             request_event.clear()
             step_output = self.step_outputs[request_id]
             outputs += step_output.new_token
-            print(step_output.new_token)
+            # print(step_output.new_token)
             yield outputs
             
             if step_output.is_finished:

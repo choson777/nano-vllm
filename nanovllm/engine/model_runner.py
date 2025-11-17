@@ -189,6 +189,7 @@ class ModelRunner:
         block_tables = None
         logit_indexs = []
         context_lens = []
+        is_multi_tokens = False
         for req in reqs:
             reqlen = len(req)
             input_ids.extend(req.token_ids[req.num_consume_tokens:])
@@ -209,6 +210,8 @@ class ModelRunner:
             if not self.is_target:
                 logit_indexs.append(cu_reqlens_q[-1] - 1)
             
+            is_multi_tokens = is_multi_tokens | (req.num_tokens - req.num_consume_tokens > 1)
+            
         block_tables = self.prepare_block_tables(reqs)
         input_ids = torch.tensor(input_ids, dtype=torch.int64, pin_memory=True).cuda(non_blocking=True)
         positions = torch.tensor(positions, dtype=torch.int64, pin_memory=True).cuda(non_blocking=True)
@@ -220,7 +223,7 @@ class ModelRunner:
             logit_indexs = torch.tensor(logit_indexs, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
         else:
             logit_indexs = None
-        set_context(req.num_tokens - req.num_consume_tokens > 1, cu_reqlens_q, cu_reqlens_k, max_reqlen_q, max_reqlen_k, slot_mapping, context_lens, block_tables, logit_indexs)
+        set_context(is_multi_tokens, cu_reqlens_q, cu_reqlens_k, max_reqlen_q, max_reqlen_k, slot_mapping, context_lens, block_tables, logit_indexs)
         return input_ids, positions
     
     def prepare_sample(self, reqs: list[Request], is_prefill):
@@ -255,6 +258,7 @@ class ModelRunner:
 
     def run(self, reqs: list[Request], is_prefill: bool) -> list[int]:
         input_ids, positions = self.prepare_prefill(reqs) if is_prefill else self.prepare_decode(reqs)
+        print(input_ids, positions, is_prefill)
         temperatures = self.prepare_sample(reqs, is_prefill) if self.rank == 0 else None
         logits = self.run_model(input_ids, positions, is_prefill)
         token_ids = self.sampler(logits, temperatures).tolist() if self.rank == 0 else None
